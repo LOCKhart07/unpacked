@@ -4,6 +4,16 @@
 
 Stats from your Discord data package: playtime per game, Go Live and watch time, voice, messages, and more. The site processes everything in your browser, so your package never leaves your machine.
 
+**Try it: <https://unpacked.lockhart.in>**
+
+![The Overview tab: hours in voice, playing games and on Go Live, messages sent, top game and server, and highlights](docs/screenshots/overview.png)
+
+| Streaming | Messages | Badges |
+|---|---|---|
+| ![Go Live hours with a chart of streaming over time](docs/screenshots/streaming.png) | ![A word cloud of favourite words and the most used emoji](docs/screenshots/messages.png) | ![Discord's profile badges with progress to the next tier](docs/screenshots/badges.png) |
+
+<sub>Screenshots use a made-up demo package, not anyone's real data.</sub>
+
 **Status:** early. The site reads playtime, streaming, voice, messages and badges; the rest of [the checklist](docs/FEATURES.md) is still to do.
 
 - [`site/`](site/): the website. Astro static pages plus plain TypeScript; the package is parsed in a Web Worker with the browser's own `DecompressionStream`, no other dependencies.
@@ -22,6 +32,8 @@ npm run dev                                   # http://localhost:4321
 npm run build                                 # static files in site/dist/
 node scripts/check.ts ../data/package.zip     # run the parser on a real package and print the numbers
 ```
+
+To get a package without using your own, `node scripts/demo-package.ts ../data/demo-package.zip` writes a made-up one (same every time; real game ids, invented everything else). [`scripts/screenshots.ts`](site/scripts/screenshots.ts) takes the README screenshots from it with headless Chrome.
 
 ## Deploying
 
@@ -42,6 +54,10 @@ python3 scripts/stats.py badges              # your profile badges vs the packag
 ```
 
 Game names are looked up from Discord's public application endpoints and cached in `data/cache/`.
+
+## Feedback
+
+Found a bug, or want a stat that isn't there? [Open an issue](https://github.com/LOCKhart07/unpacked/issues/new/choose). Please don't attach your package; it's personal.
 
 ## License
 
