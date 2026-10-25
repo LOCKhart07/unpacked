@@ -4,7 +4,7 @@
 
 Stats from your Discord data package: playtime per game, Go Live and watch time, voice, messages, and more. The site processes everything in your browser, so your package never leaves your machine.
 
-**Try it: <https://unpacked.lockhart.in>**
+**Try it: <https://unpacked.lockhart.in>** (no package yet? [try it with sample data](https://unpacked.lockhart.in/stats/?demo))
 
 ![The Overview tab: hours in voice, playing games and on Go Live, messages sent, top game and server, and highlights](docs/screenshots/overview.png)
 

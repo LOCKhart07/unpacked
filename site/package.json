@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "node scripts/demo-package.ts public/demo-package.zip",
     "dev": "astro dev",
+    "prebuild": "node scripts/demo-package.ts public/demo-package.zip",
     "build": "astro build",
     "preview": "astro preview",
     "check": "astro check"

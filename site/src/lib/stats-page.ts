@@ -63,8 +63,12 @@ function fail(message: string, error?: string) {
   show("drop");
 }
 
-function start(file: File) {
+// Set while showing the made-up sample package, so the page says so.
+let demo = false;
+
+function start(file: File, isDemo = false) {
   errorBox.hidden = true;
+  demo = isDemo;
   if (!/\.zip$/i.test(file.name)) {
     fail("Choose the package.zip file Discord emailed you (not an extracted folder).");
     return;
@@ -108,6 +112,20 @@ drop.addEventListener("drop", (e) => {
   const file = e.dataTransfer?.files[0];
   if (file) start(file);
 });
+// The sample package is made at build time by scripts/demo-package.ts:
+// invented people and messages, real game ids. /stats/?demo opens it directly.
+async function startDemo() {
+  try {
+    const res = await fetch("/demo-package.zip");
+    if (!res.ok) throw new Error(String(res.status));
+    start(new File([await res.blob()], "demo-package.zip"), true);
+  } catch {
+    fail("Couldn't load the sample data. Check your connection and try again.");
+  }
+}
+$<HTMLButtonElement>("#demo").addEventListener("click", startDemo);
+if (new URLSearchParams(location.search).has("demo")) startDemo();
+
 cancel.addEventListener("click", () => {
   worker?.terminate();
   worker = null;
@@ -487,6 +505,8 @@ function render(data: PackageData, apps: Apps) {
         </div>
         <button class="button ghost small" id="again">Open another package</button>
       </div>
+      ${demo ? `<div class="notice demo">This is <strong>made-up sample data</strong>, so you can see what Unpacked shows.
+        <a href="/stats/">Open your own package</a></div>` : ""}
       ${data.missing.length ? `<div class="notice"><strong>Some sections weren't in this package.</strong><ul>${
         data.missing.map((m) => `<li>${esc(m)}</li>`).join("")}</ul></div>` : ""}
       <div class="sticky">
