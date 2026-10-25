@@ -1,0 +1,51 @@
+---
+import "../styles/global.css";
+
+interface Props {
+  title: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+const SITE_NAME = "Discord Data Stats";
+const path = Astro.url.pathname;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta name="color-scheme" content="dark light" />
+    <slot name="head" />
+  </head>
+  <body>
+    <header class="site-header">
+      <nav class="wrap nav">
+        <a class="brand" href="/">{SITE_NAME}</a>
+        <div class="nav-links">
+          <a href="/request-your-discord-data/" aria-current={path.startsWith("/request") ? "page" : undefined}>Get your data</a>
+          <a href="/stats/" class="button small" aria-current={path.startsWith("/stats") ? "page" : undefined}>Open your package</a>
+        </div>
+      </nav>
+    </header>
+    <main>
+      <slot />
+    </main>
+    <footer class="site-footer">
+      <div class="wrap">
+        <p>
+          Your package is read in your browser and never uploaded. Not affiliated with Discord.{" "}
+          <a href="https://github.com/LOCKhart07/discord-data">Source on GitHub</a> (GPL-3.0).
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

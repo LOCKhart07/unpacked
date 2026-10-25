@@ -2,10 +2,23 @@
 
 Stats from your Discord data package: playtime per game, Go Live and watch time, voice, messages, and more. The site processes everything in your browser, so your package never leaves your machine.
 
-**Status:** research and prototype. The site isn't built yet.
+**Status:** early. The site reads playtime, streaming, voice and badges; messages and the rest of [the checklist](docs/FEATURES.md) are still to do.
 
+- [`site/`](site/): the website. Astro static pages plus plain TypeScript; the package is parsed in a Web Worker with the browser's own `DecompressionStream`, no other dependencies.
 - [`docs/FEATURES.md`](docs/FEATURES.md): feature checklist compared with existing tools, package format notes, and edge cases from their issue trackers.
 - [`scripts/stats.py`](scripts/stats.py): Python prototype of the playtime, streaming, voice and badge parsing (stdlib only).
+
+## Running the site
+
+Needs Node 22.12 or newer.
+
+```sh
+cd site
+npm install
+npm run dev                                   # http://localhost:4321
+npm run build                                 # static files in site/dist/
+node scripts/check.ts ../data/package.zip     # run the parser on a real package and print the numbers
+```
 
 ## Trying the prototype
 

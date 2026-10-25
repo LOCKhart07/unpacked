@@ -1,0 +1,43 @@
+---
+import Base from "../layouts/Base.astro";
+import "../styles/stats.css";
+---
+
+<Base
+  title="Open your Discord data package · Discord Data Stats"
+  description="Drop your Discord package.zip to see your playtime, Go Live and voice time. Everything is read in your browser; nothing is uploaded."
+>
+  <div class="wrap">
+    <section id="drop">
+      <h1>Open your package</h1>
+      <p class="muted">
+        Choose the <code>package.zip</code> Discord emailed you. It's read right here in your browser and never uploaded.
+        Don't have it yet? <a href="/request-your-discord-data/">Here's how to request it.</a>
+      </p>
+      <label class="dropzone">
+        <input id="file" type="file" accept=".zip,application/zip" />
+        <span class="dropzone-title">Drop package.zip here</span>
+        <span class="muted">or click to choose it</span>
+      </label>
+      <p class="muted small">
+        Big packages (several GB of activity data) take a minute. The only network requests are to Discord's public
+        game list, to put names on your games.
+      </p>
+    </section>
+
+    <p id="error" class="notice error" role="alert" hidden></p>
+
+    <section id="progress" hidden aria-live="polite">
+      <h1>Reading your package</h1>
+      <p><span id="phase">Starting</span> <span id="percent" class="muted"></span></p>
+      <div class="progress"><div id="bar"></div></div>
+      <button id="cancel" class="button ghost small">Cancel</button>
+    </section>
+
+    <section id="results" hidden></section>
+  </div>
+</Base>
+
+<script>
+  import "../lib/stats-page.ts";
+</script>

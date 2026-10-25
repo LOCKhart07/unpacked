@@ -1,0 +1,64 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+<Base
+  title="How to request your Discord data package (2026 guide) · Discord Data Stats"
+  description="Step-by-step: request your data package from Discord, what's inside the ZIP, how long it takes, and which sections you need for playtime, streaming and voice stats."
+>
+  <article class="wrap prose">
+    <h1>How to request your Discord data package</h1>
+    <p class="muted">
+      Discord will send you a copy of the data it has on your account. It's a ZIP file with your account details,
+      messages, servers and a log of what you've done in the app. That log is where playtime, Go Live and voice time
+      come from.
+    </p>
+
+    <h2>1. Request it in Discord</h2>
+    <ol>
+      <li>Open Discord on your computer and go to <strong>User Settings</strong> (the gear next to your name).</li>
+      <li>Open <strong>Data &amp; Privacy</strong>.</li>
+      <li>Scroll to <strong>Request Data</strong>.</li>
+      <li>
+        Choose what to include. For the stats on this site, include at least <strong>Account</strong> and
+        <strong>Activity</strong>. Messages and Servers add server and channel names.
+      </li>
+      <li>Confirm the request.</li>
+    </ol>
+
+    <h2>2. Wait for the email</h2>
+    <p>
+      Discord emails a download link when the package is ready. It often takes a few days, and can take longer. The link
+      expires after a while, so download the ZIP when it arrives.
+    </p>
+
+    <h2>3. Open it here</h2>
+    <p>
+      Don't extract the ZIP. Go to <a href="/stats/">Open your package</a> and drop <code>package.zip</code> onto the
+      page. It's read in your browser and never uploaded.
+    </p>
+
+    <h2>What's inside the package</h2>
+    <ul>
+      <li><strong>Account:</strong> your profile, connections, badges, and lifetime playtime per game.</li>
+      <li><strong>Activity:</strong> large event logs (often several GB unzipped) with streams, calls and app usage.</li>
+      <li><strong>Messages:</strong> your messages, one folder per channel or DM.</li>
+      <li><strong>Servers:</strong> the servers you're in.</li>
+    </ul>
+    <p class="muted">
+      Folder names are in the language your Discord is set to (for example <code>Compte/</code> in French). That's
+      fine: the stats page finds files by what's in them.
+    </p>
+
+    <h2>Why some stats might be missing</h2>
+    <ul>
+      <li>
+        If <strong>"Use data to improve Discord"</strong> was turned off in Data &amp; Privacy, Discord didn't log some
+        activity during that time, so there will be gaps.
+      </li>
+      <li>If you left out the Activity section, streaming and voice stats can't be shown.</li>
+    </ul>
+
+    <p><a class="button" href="/stats/">Open your package</a></p>
+  </article>
+</Base>

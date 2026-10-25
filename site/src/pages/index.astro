@@ -1,0 +1,98 @@
+---
+import Base from "../layouts/Base.astro";
+
+const faq = [
+  {
+    q: "Is my Discord data uploaded anywhere?",
+    a: "No. The page reads your package.zip inside your browser tab and never sends it anywhere. The only network requests are to Discord's public list of games, to turn game ids into names.",
+  },
+  {
+    q: "How do I get my Discord data package?",
+    a: "In Discord, open User Settings → Data & Privacy and request your data. Discord emails you a download link when it's ready, usually within a few days.",
+  },
+  {
+    q: "Why are my numbers higher than my Discord profile badges?",
+    a: "Discord's Game Time, Streaming and Game Variety badges only count from about November 2024. Your package goes back to when you made your account, so lifetime totals are much bigger. The stats page shows both.",
+  },
+  {
+    q: "Can I see playtime for a single year?",
+    a: "Not for games: the package only has one lifetime total per game. Streaming, camera and voice time come from dated events, so those can be shown for any year or the last 30 days, 6 months or 12 months.",
+  },
+];
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: faq.map(({ q, a }) => ({ "@type": "Question", name: q, acceptedAnswer: { "@type": "Answer", text: a } })),
+};
+---
+
+<Base
+  title="Discord Data Stats: your playtime, Go Live and voice time from your Discord package"
+  description="See how many hours you've played each game, streamed with Go Live, watched streams and talked in voice, from your Discord data package. Runs in your browser; nothing is uploaded."
+>
+  <div class="wrap">
+    <section class="hero">
+      <h1>Every hour you've spent on Discord, from your own data.</h1>
+      <p class="lead muted">
+        Playtime per game, Go Live and watch time, how much you talk in voice, and how your lifetime totals compare with
+        your profile badges. Read straight from your Discord data package, in your browser.
+      </p>
+      <div class="hero-actions">
+        <a class="button" href="/stats/">Open your package</a>
+        <a class="button ghost" href="/request-your-discord-data/">How to get it</a>
+      </div>
+    </section>
+
+    <section class="grid features">
+      <div class="card">
+        <h2>Playtime per game</h2>
+        <p class="muted">Lifetime hours for every game Discord has seen you play, with duplicate game entries merged.</p>
+      </div>
+      <div class="card">
+        <h2>Go Live and watch time</h2>
+        <p class="muted">Hours streamed, what you streamed most, your longest stream, and time spent watching friends' streams and cameras.</p>
+      </div>
+      <div class="card">
+        <h2>Voice: talking vs listening</h2>
+        <p class="muted">Total time in voice, how much of it you were talking, and your top servers and channels.</p>
+      </div>
+      <div class="card">
+        <h2>Any time range</h2>
+        <p class="muted">Lifetime, the last 30 days, 6 or 12 months, or a single year, plus how your badges line up.</p>
+      </div>
+    </section>
+
+    <section class="card private">
+      <h2>Your package never leaves your computer</h2>
+      <p class="muted">
+        Other tools ask you to upload your data or paste a download link to their server. This one reads the ZIP in
+        your browser tab. Close the tab and it's gone. The code is open source, so you can check.
+      </p>
+    </section>
+
+    <section class="faq prose">
+      <h2>Questions</h2>
+      {faq.map(({ q, a }) => (
+        <details>
+          <summary>{q}</summary>
+          <p class="muted">{a}</p>
+        </details>
+      ))}
+    </section>
+  </div>
+  <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} slot="head" />
+</Base>
+
+<style>
+  .hero { padding-block: 40px 56px; max-width: 760px; }
+  .lead { font-size: 1.2rem; }
+  .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 24px; }
+  .features h2 { font-size: 1.15rem; }
+  .features p { margin: 0; }
+  .private { margin-block: 32px; }
+  .faq { margin-top: 40px; }
+  .faq details { border-bottom: 1px solid var(--border); padding-block: 12px; }
+  .faq summary { cursor: pointer; font-weight: 600; }
+  .faq details p { margin: 8px 0 0; }
+</style>

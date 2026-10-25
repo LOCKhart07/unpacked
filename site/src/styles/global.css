@@ -1,0 +1,82 @@
+:root {
+  --bg: #0f1014;
+  --surface: #181a20;
+  --surface-2: #20232b;
+  --border: #2a2e38;
+  --text: #e8e9ee;
+  --muted: #9a9fae;
+  --accent: #7c6cf0;
+  --accent-2: #a597ff;
+  --good: #3ecf8e;
+  --warn: #f5a524;
+  --radius: 14px;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f6f6f9;
+    --surface: #ffffff;
+    --surface-2: #f0f0f5;
+    --border: #e0e1e8;
+    --text: #15161b;
+    --muted: #5d6170;
+    color-scheme: light;
+  }
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.6 var(--font);
+}
+a { color: var(--accent-2); }
+h1, h2, h3 { line-height: 1.2; margin: 0 0 0.5em; }
+h1 { font-size: clamp(2rem, 5vw, 3.2rem); letter-spacing: -0.02em; }
+h2 { font-size: 1.5rem; letter-spacing: -0.01em; }
+p { margin: 0 0 1em; }
+.muted { color: var(--muted); }
+.wrap { width: min(1100px, 100% - 32px); margin-inline: auto; }
+
+.site-header { border-bottom: 1px solid var(--border); }
+.nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 14px; }
+.brand { font-weight: 700; color: var(--text); text-decoration: none; }
+.nav-links { display: flex; align-items: center; gap: 18px; }
+.nav-links a { color: var(--muted); text-decoration: none; }
+.nav-links a[aria-current="page"], .nav-links a:hover { color: var(--text); }
+
+.button {
+  display: inline-block;
+  padding: 0.7em 1.3em;
+  border-radius: 999px;
+  border: 0;
+  background: var(--accent);
+  color: #fff !important;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.button:hover { background: var(--accent-2); }
+.button.small { padding: 0.4em 1em; font-size: 0.9rem; }
+.button.ghost { background: transparent; border: 1px solid var(--border); color: var(--text) !important; }
+
+main { padding-block: 40px 80px; }
+.site-footer { border-top: 1px solid var(--border); padding-block: 24px; color: var(--muted); font-size: 0.9rem; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+}
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+
+/* Article pages (guide) */
+.prose { max-width: 720px; }
+.prose li { margin-bottom: 0.4em; }
+.prose code { background: var(--surface-2); padding: 0.1em 0.35em; border-radius: 6px; }
