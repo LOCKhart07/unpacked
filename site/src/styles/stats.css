@@ -98,7 +98,7 @@
 section.card { margin-bottom: 20px; }
 .card h2 { font-size: 1.15rem; }
 .card h3 { font-size: 0.8rem; margin: 1.6em 0 0.6em; color: var(--muted); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
-.card .split > div > h3:first-child { margin-top: 0.4em; }
+.card > .split:first-child > div > h3:first-child { margin-top: 0.4em; }
 .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 4px 16px; flex-wrap: wrap; margin-bottom: 12px; }
 .card-head h2, .card-head p { margin: 0; }
 
@@ -108,7 +108,9 @@ section.card { margin-bottom: 20px; }
 
 .quote { margin: 0; padding: 4px 0 4px 16px; border-left: 3px solid var(--accent); font-size: 1.05rem; overflow-wrap: anywhere; }
 .quote footer { margin-top: 6px; }
-.split { display: grid; gap: 28px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+/* Always two equal columns (one on phones), so a row with one table keeps it half width. */
+.split { display: grid; gap: 28px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 700px) { .split { grid-template-columns: minmax(0, 1fr); } }
 .big { font-size: 2rem; font-weight: 700; margin-bottom: 0.3em; }
 
 table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }

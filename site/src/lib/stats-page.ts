@@ -355,18 +355,12 @@ function render(data: PackageData, apps: Apps) {
       </section>
       <section class="card">
         <div class="split">
-          <div>
-            <h3>Top servers</h3>
-            ${table(v.servers, v.total)}
-            <h3>Top channels</h3>
-            ${table(v.channels, v.total)}
-          </div>
-          <div>
-            <h3>By kind</h3>
-            ${table(v.kinds)}
-            <h3>By year</h3>
-            ${table(v.byYear, v.total, Math.max(0, ...v.byYear.map((r) => r[1])), hours, undefined, null)}
-          </div>
+          <div><h3>Top servers</h3>${table(v.servers, v.total)}</div>
+          <div><h3>Top channels</h3>${table(v.channels, v.total)}</div>
+        </div>
+        <div class="split">
+          <div><h3>By kind</h3>${table(v.kinds)}</div>
+          <div><h3>By year</h3>${table(v.byYear, v.total, Math.max(0, ...v.byYear.map((r) => r[1])), hours, undefined, null)}</div>
         </div>
       </section>`;
   };
@@ -411,17 +405,12 @@ function render(data: PackageData, apps: Apps) {
       </section>
       <section class="card">
         <div class="split">
-          <div>
-            <h3>Top DMs</h3>
-            ${table(m.dms, m.count, undefined, count)}
-            ${m.groups.length ? `<h3>Group DMs</h3>${table(m.groups, m.count, undefined, count)}` : ""}
-          </div>
-          <div>
-            <h3>Top servers</h3>
-            ${table(m.servers, m.count, undefined, count)}
-            <h3>Top channels</h3>
-            ${table(m.channels, m.count, undefined, count)}
-          </div>
+          <div><h3>Top DMs</h3>${table(m.dms, m.count, undefined, count)}</div>
+          <div><h3>Top servers</h3>${table(m.servers, m.count, undefined, count)}</div>
+        </div>
+        <div class="split">
+          <div><h3>Top channels</h3>${table(m.channels, m.count, undefined, count)}</div>
+          ${m.groups.length ? `<div><h3>Group DMs</h3>${table(m.groups, m.count, undefined, count)}</div>` : ""}
         </div>
       </section>
       <section class="card">
