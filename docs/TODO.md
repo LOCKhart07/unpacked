@@ -7,7 +7,7 @@ Not in priority order, and none of it has to land at once. The full feature list
 - [x] **Redesign the stats page.** Headline numbers per tab, charts with an axis, hover values and the peak marked, over-time charts for Streaming and Voice, badge progress bars, and tabs that stay pinned while scrolling.
 - [x] **Split the stats page into tabs:** Overview · Games · Streaming · Voice · Badges, Messages, with the tab in the URL (`#voice`).
 - [x] **Range selector is confusing.** The range chips now only show on tabs with dated data (Streaming, Voice, Messages); the others say "Lifetime totals". The range carries over between those tabs.
-- [ ] **Highlight the important numbers.** Bigger headline stats, comparisons people get at a glance ("that's 414 days in voice"), and a top-of-page summary.
+- [x] **Highlight the important numbers.** Bigger headline stats, comparisons people get at a glance ("that's 414 days in voice"), and a Highlights card on the Overview.
 - [x] **Game images on Overview** (most played and most streamed game), from `icon_hash` in Discord's detectable list via `cdn.discordapp.com/app-icons/<id>/<hash>.png`; the CSP allows that host.
 - [x] **Game images in the Games table and the streamed-games list.** Streamed games are matched by name, including Discord's aliases for renamed apps.
 
