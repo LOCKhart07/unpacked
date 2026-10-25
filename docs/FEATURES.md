@@ -151,15 +151,20 @@ Checked against the Oct 2026 package:
 
 ## Badges
 
-Discord's profile badges (2026) show much lower numbers than the lifetime totals from the package. **The package has the badges you own** in `user.json` → `user_profile_metadata.owned_badges`: `badge.type` (19 = Streaming, 20 = Game Time, 21 = a third tiered badge, tiers `sampler … voyager`, thresholds unknown) and `tier_base.tier_obtained_at` per tier. Tiers below the one you had when badges launched (2026-07-29) all share that back-filled timestamp. Tiers seen so far:
+Discord's profile badges (2026) show much lower numbers than the lifetime totals from the package. **The package has the badges you own** in `user.json` → `user_profile_metadata.owned_badges`: `badge.type` (19 = Streaming, 20 = Game Time, 21 = Game Variety) and `tier_base.tier_obtained_at` per tier. Tiers below the one you had when badges launched (2026-07-29) all share that back-filled timestamp. Tiers seen so far:
 
 - **Game Time:** Casual 1 h, Recreational 5, Dedicated 20, Committed 75, Serious 150, Devoted 300, Seasoned 500, Ironclad 1,000, plus higher tiers that aren't shown yet.
 - **Streaming:** Newcomer 1 h, Fledgling 5, Breakout 20, Standout 75, Trendsetter 150, Headliner 300, Star 500, Sensation 1,000, plus higher tiers that aren't shown yet.
+- **Game Variety** ("detectable PC games played with Discord open"): Sampler 2 games, Dabbler 5, Enthusiast 10, Ranger 15, then Explorer, Adventurer, Voyager (thresholds hidden in the app; Voyager is ≤ 58), next tier at 60.
 
 On one test package:
 
-- **Streaming:** Headliner (300 h+, not yet Star at 500). Go Live time fits that only when counted from a start month between **Nov 2023 and Nov 2024** (466 h since 1 Jan 2024; 2,922 h lifetime). Tracking for badges probably started around then.
-- **Game time:** Seasoned (500 h+, reached 2026-08-18, not yet Ironclad at 1,000). Games whose `first_played_at` is on or after 2024-04-28 (the date that field starts being filled in) already add up to 1,077 h, and lifetime is 3,473 h. So it's not just a date cutoff, and the package doesn't show how it's calculated. Open question.
+**All three badges fit counting from about 23 Oct – 1 Nov 2024.** `stats.py badges` uses 2024-11-01.
+
+- **Game Variety:** the app said Voyager, 58 games played. Games whose `first_played_at` is on or after a date between 2024-10-23 and 2025-02-22, merged by name, are exactly 58 (148 lifetime).
+- **Streaming:** Headliner (300 h+, not yet Star at 500). Go Live time fits only when counted from a start month between Nov 2023 and Nov 2024. From 2024-11-01: 320 h by the 2026-07-29 back-fill, 407 h now (2,922 h lifetime).
+- **Game time:** Seasoned (500 h+, reached 2026-08-18, not yet Ironclad at 1,000). Games first played since 2024-11-01 have 409 h, all of it inside the window; older games played since then add an unknown share (the package has only lifetime totals per game), so the badge's 500–1,000 h fits. An earlier guess of 2024-04-28 gave 1,077 h from new games alone, which ruled that date out.
+- So the site can show "your badges count from about Nov 2024" and estimate Game Variety exactly, Streaming exactly, and Game Time as a lower bound.
 
 Present this as "your badge counts from about 2024; here's everything", not as Discord being wrong.
 

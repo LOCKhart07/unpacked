@@ -293,15 +293,22 @@ def cmd_voice(pkg, since):
 
 
 # Profile badge types in user_profile_metadata.owned_badges, with tier
-# thresholds in hours. Type 21 has tiers (sampler ... voyager) but its
-# thresholds aren't known yet.
+# thresholds (hours, or games for Game Variety). None = not known yet. Game
+# Variety's explorer / adventurer / voyager thresholds are hidden in the app;
+# only "voyager at 58 games, 2 more to the next tier" has been seen.
 BADGES = {
-    19: ("Streaming", [("newcomer", 1), ("fledgling", 5), ("breakout", 20), ("standout", 75),
-                       ("trendsetter", 150), ("headliner", 300), ("star", 500), ("sensation", 1000)]),
-    20: ("Game Time", [("casual", 1), ("recreational", 5), ("dedicated", 20), ("committed", 75),
-                       ("serious", 150), ("devoted", 300), ("seasoned", 500), ("ironclad", 1000)]),
+    19: ("Streaming", "h", [("newcomer", 1), ("fledgling", 5), ("breakout", 20), ("standout", 75),
+                            ("trendsetter", 150), ("headliner", 300), ("star", 500), ("sensation", 1000)]),
+    20: ("Game Time", "h", [("casual", 1), ("recreational", 5), ("dedicated", 20), ("committed", 75),
+                            ("serious", 150), ("devoted", 300), ("seasoned", 500), ("ironclad", 1000)]),
+    21: ("Game Variety", "games", [("sampler", 2), ("dabbler", 5), ("enthusiast", 10), ("ranger", 15),
+                                   ("explorer", None), ("adventurer", None), ("voyager", None),
+                                   ("(next tier)", 60)]),
 }
-FIRST_PLAYED_FILLED = "2024-04-28"  # first_played_at is only set for games first played since
+# All three badges fit counting from about here on the test package (see
+# docs/FEATURES.md). first_played_at is filled from 2024-04-28, so games first
+# played after this date have all their playtime inside the badge window.
+BADGE_START = "2024-11-01"
 
 
 def stream_start_window(streams, tiers, got):
@@ -333,9 +340,13 @@ def cmd_badges(pkg):
         return
 
     stats = user["user_activity_application_statistics"]
+    is_new = lambda s: (s.get("first_played_at") or "") >= BADGE_START
     play_all = sum(s["total_duration"] for s in stats) / 3600
-    play_new = sum(s["total_duration"] for s in stats
-                   if (s.get("first_played_at") or "") >= FIRST_PLAYED_FILLED) / 3600
+    play_new = sum(s["total_duration"] for s in stats if is_new(s)) / 3600
+    names = app_names([s["application_id"] for s in stats], user)
+    game = lambda s: canon(names.get(s["application_id"], s["application_id"]))
+    games_all = len({game(s) for s in stats})
+    games_new = len({game(s) for s in stats if is_new(s)})
     streams = sorted((event_ts(d), int(d.get("duration") or 0))
                      for d in iter_events(find_event_files(pkg), "video_stream_ended")
                      if (d.get("context"), d.get("participant_type")) == ("stream", "streamer"))
@@ -348,22 +359,27 @@ def cmd_badges(pkg):
         if badge["type"] not in BADGES:
             # Tiers below the current one were all back-filled with the same
             # timestamp, so their order can't be read from the dates.
-            print(f"Badge type {badge['type']}: {tier} (thresholds unknown; tiers reached: "
+            print(f"Badge type {badge['type']}: {tier} (unknown badge; tiers reached: "
                   f"{', '.join(sorted(got))})\n")
             continue
-        name, tiers = BADGES[badge["type"]]
-        hours = dict(tiers)
+        name, unit, tiers = BADGES[badge["type"]]
+        at = dict(tiers).get(tier)
         nxt = next(((n, h) for n, h in tiers if n not in got), None)
-        print(f"{name} badge: {tier.title()} ({hours.get(tier, '?')} h+, reached {got.get(tier, '')[:10]})"
-              + (f", next {nxt[0].title()} at {nxt[1]:,} h" if nxt else ""))
+        print(f"{name} badge: {tier.title()} ({f'{at:,} {unit}+' if at else f'? {unit}'}, "
+              f"reached {got.get(tier, '')[:10]})"
+              + (f", next at {nxt[1]:,} {unit}" if nxt and nxt[1] else ""))
         if badge["type"] == 20:
-            print(f"  lifetime playtime in package:           {play_all:8,.0f} h")
-            print(f"  games first played since {FIRST_PLAYED_FILLED}:   {play_new:8,.0f} h")
-            print("  (the package only has lifetime totals per game, so the badge's start date can't be checked)")
+            print(f"  lifetime playtime in package:              {play_all:8,.0f} h")
+            print(f"  games first played since {BADGE_START}:      {play_new:8,.0f} h")
+            print("  (a lower bound for the badge: older games played since then add an unknown share,")
+            print("   since the package only has lifetime totals per game)")
+        elif badge["type"] == 21:
+            print(f"  games in package, lifetime:                {games_all:8,}")
+            print(f"  games first played since {BADGE_START}:      {games_new:8,}")
         else:
             print(f"  lifetime Go Live in package:   {go_live():8,.0f} h")
-            print(f"  Go Live since 2024-01-01:      {go_live('2024-01-01'):8,.0f} h")
-            ok = stream_start_window(streams, tiers, got)
+            print(f"  Go Live since {BADGE_START}:      {go_live(BADGE_START):8,.0f} h")
+            ok = stream_start_window(streams, [t for t in tiers if t[1]], got)
             if ok:
                 print(f"  matches counting from {ok[0]}" + (f" to {ok[-1]}" if len(ok) > 1 else ""))
             else:
