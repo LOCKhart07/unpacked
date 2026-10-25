@@ -193,7 +193,7 @@ function render(data: PackageData, names: Record<string, string>) {
 
       ${badgeRows.length ? `<section class="card">
         <h2>Your profile badges</h2>
-        <p class="muted">Discord's badges only count from about ${BADGE_START}. Here's how that compares with everything in your package.</p>
+        <p class="muted">Discord's badges probably only count from about ${BADGE_START} (Discord doesn't say; that's the date that best fits the data). Here's how that compares with everything in your package.</p>
         <div class="tiles">${badgeRows.map((b) => {
           const fmt = (n: number) => `${Math.round(n).toLocaleString()}${b.unit === "h" ? " h" : " games"}`;
           return tile(
