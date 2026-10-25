@@ -223,7 +223,11 @@ function render(data: PackageData, apps: Apps) {
       </div>`;
   };
 
+  const unnamed = play.rows.filter((r) => r.name.startsWith("Unknown app (")).length;
   const games = () => `
+    ${unnamed ? `<div class="notice">${unnamed} ${unnamed === 1 ? "game" : "games"} couldn't be named. Game names come
+      from Discord, and the lookup failed or was blocked, which ad and tracker blockers sometimes do. Reloading the
+      page and opening the package again usually fixes it.</div>` : ""}
     <section class="card">
       <h2>Playtime</h2>
       <p class="muted">The package has a single total per game, with no dates, so this can't be split by year.</p>

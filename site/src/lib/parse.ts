@@ -445,19 +445,40 @@ export async function resolveApps(ids: string[], library: Record<string, string>
   const todo = ids.filter((id) => !names[id]);
   const worker = async () => {
     for (let id = todo.pop(); id; id = todo.pop()) {
-      try {
-        const res = await fetch(`${API}/${id}/rpc`);
-        if (!res.ok) continue;
-        const app = await res.json();
-        names[id] = app.name;
-        if (app.icon) icons[id] = app.icon;
-      } catch {
-        // Leave it unknown.
-      }
+      const app = await rpcLookup(id);
+      if (!app) continue;
+      names[id] = app.name;
+      if (app.icon) icons[id] = app.icon;
     }
   };
-  await Promise.all([worker(), worker(), worker(), worker()]);
+  await Promise.all([worker(), worker()]);
   return { names, icons, aliases, exeIds };
+}
+
+// One app's public info. Retries rate limits and network errors with backoff,
+// and keeps answers in Cache Storage so reloading the page doesn't ask again
+// (repeated loads are what get rate-limited). Returns null if it can't be named.
+const RPC_CACHE = "app-rpc-v1";
+
+async function rpcLookup(id: string): Promise<{ name: string; icon?: string | null } | null> {
+  const url = `${API}/${id}/rpc`;
+  const cache = typeof caches === "undefined" ? null : await caches.open(RPC_CACHE).catch(() => null);
+  const hit = await cache?.match(url);
+  if (hit) return hit.json();
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        await cache?.put(url, res.clone()).catch(() => {});
+        return res.json();
+      }
+      if (res.status === 404) return null; // not a public app
+    } catch {
+      // Network error, or blocked by an extension: retry, then give up.
+    }
+    await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
+  }
+  return null;
 }
 
 // Square game icon on Discord's CDN. The browser fetches it straight from
