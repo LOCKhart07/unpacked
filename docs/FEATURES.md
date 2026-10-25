@@ -32,16 +32,16 @@ Priority: **P0** = what makes us different, **P1** = needed to match the existin
 | Top streamed games / screen share | | | | `video_stream_ended.share_application_name` (empty = screen or window share) | P0 |
 | Time watching others' streams | | | | `video_stream_ended`, `participant_type=receiver` | P0 |
 | Camera on / watching others' cameras | | | | `video_stream_ended`, `context=default`, `sender` / `receiver` | P1 |
-| Lifetime totals vs Game Time / Streaming badge tiers | | | | the above + tier thresholds (see [Badges](#badges)) | P0 |
+| Lifetime totals vs Game Time / Streaming badge tiers | | | | the above + `user_profile_metadata.owned_badges` (see [Badges](#badges)) | P0 |
 | Playtime and streaming by year | | | | streams: event timestamps. Playtime: **not possible**, the package only has lifetime totals per game | P0 |
 
 ### Voice and sessions
 
 | Feature | DDPE | DP | Dumpus | Source | Pri |
 |---|---|---|---|---|---|
-| Total time in voice channels | | | ✅ | `voice_disconnect.duration` / `leave_voice_channel.duration` (check units) | P1 |
-| Voice time per server / channel, longest call | | 💡 #145 | ✅ | same + `guild_id`, `channel_id` | P1 |
-| Time spent talking vs listening | | | | `voice_disconnect.duration_speaking` / `duration_listening` | P0 |
+| Total time in voice channels | | | ✅ | `voice_disconnect.duration` (skip `context=stream`) / `leave_voice_channel.duration`, both ms (see [Voice](#voice)) | P1 |
+| Voice time per server / channel, longest call | | 💡 #145 | ✅ | same + `guild_id`, `channel_id`; names from `Servers/index.json` and `Messages/index.json` | P1 |
+| Time spent talking vs listening | | | | `voice_disconnect.duration_speaking` / `duration_listening` (seconds, or `*_ms`) | P0 |
 | Call stats per person (DM calls) | | | 💡 #359 | `start_call` / `join_call` + DM `channel_id` → `Messages/c<id>/channel.json` recipients | P2 |
 | Time on Discord (sessions) | | | ✅ | `session_start` / `session_end`, paired on `session` (no duration field) | P1 |
 | App opens, average per day | ✅ | ✅ | ✅ | `app_opened` | P1 |
@@ -121,7 +121,7 @@ Support_Tickets/
   4. Otherwise show "Unknown app (id)".
 - **One game can have several app ids** (old and new ids, Legacy/Enhanced editions). Merge by normalised name, ignoring ™/®, colons and "Game of the Year Edition".
 - **Playtime only has lifetime totals per game.** There's no per-day breakdown, so playtime can't be split by year or time range. Streams, voice and messages can.
-- **Durations:** `total_duration` and `video_stream_ended.duration` are in seconds. Check the units of the voice durations before using them.
+- **Durations:** `total_duration` and `video_stream_ended.duration` are in seconds. Voice durations are mixed; see [Voice](#voice).
 - **Payments moved.** New packages have `user_data_exports/discord_billing/payments.json` shaped as `{section, generated_at, record_count, metadata, records}`, and `user.json.payments` may be missing. That missing field crashed DDPE (#148). Only count successful payments, not failed or refunded ones (Dumpus #261), and handle regional currencies (DDPE #56, DP #34) and gifts bought through Apple (DP #13).
 - **Messages:** fields are capitalised (`ID`, `Timestamp`, `Contents`, `Attachments`). Old packages used `messages.csv`, and older ones had no `c` prefix on channel folders. Message types changed format too (DP #163).
 
@@ -138,25 +138,38 @@ Support_Tickets/
 - **Server count:** count `Servers/index.json` entries, don't infer it from messages (Dumpus #342).
 - **Earliest date:** start time ranges from the earliest real data, not a hard-coded date (Dumpus #184, #185).
 
+## Voice
+
+Checked against the Oct 2026 package:
+
+- **`voice_disconnect` fires once per RTC connection, and Go Live opens its own** (`context=stream`, next to the voice one with `context=default`). Skip `context=stream` or voice time counts streams twice. Old events (2018–20) have no `context`.
+- **Units:** `duration` is **milliseconds** in both `voice_disconnect` and `leave_voice_channel`. `duration_connected`, `duration_speaking`, `duration_listening` and `duration_participation` are **whole seconds**. Newer events (2023+) also have exact `*_ms` versions; prefer those.
+- **Speaking and listening overlap.** Speaking is your mic sending audio, listening is receiving others'; `participation` is about their union. Measure them against `duration_connected`, not `duration`: in 2021–22 some long sessions have `duration_connected` far below `duration` (1,665 h vs 2,951 h in 2022), and the speaking/listening numbers follow `duration_connected`.
+- **Both sources have gaps.** `voice_disconnect` barely exists before 2020; `leave_voice_channel` goes back to 2017 but has no `duration` on many events from Sep 2020 to Mar 2021. Elsewhere they agree within a few percent. Take the larger of the two per month.
+- `channel_type`: 2 = server voice, 1 = DM call, 3 = group DM call, 13 = stage. A connection can last days if the client stays in a channel (longest here: 84 h).
+- Voice channel names are only in `Messages/index.json` if you've sent a message in the channel's text chat. Otherwise show the server name.
+
 ## Badges
 
-Discord's profile badges (2026) show much lower numbers than the lifetime totals from the package. Tiers seen so far:
+Discord's profile badges (2026) show much lower numbers than the lifetime totals from the package. **The package has the badges you own** in `user.json` → `user_profile_metadata.owned_badges`: `badge.type` (19 = Streaming, 20 = Game Time, 21 = a third tiered badge, tiers `sampler … voyager`, thresholds unknown) and `tier_base.tier_obtained_at` per tier. Tiers below the one you had when badges launched (2026-07-29) all share that back-filled timestamp. Tiers seen so far:
 
 - **Game Time:** Casual 1 h, Recreational 5, Dedicated 20, Committed 75, Serious 150, Devoted 300, Seasoned 500, Ironclad 1,000, plus higher tiers that aren't shown yet.
 - **Streaming:** Newcomer 1 h, Fledgling 5, Breakout 20, Standout 75, Trendsetter 150, Headliner 300, Star 500, Sensation 1,000, plus higher tiers that aren't shown yet.
 
 On one test package:
 
-- **Streaming:** the badge matched stream time counted from about **late 2023 / 1 Jan 2024** onward. Tracking for badges probably started around then.
-- **Game time:** the badge was lower even than the games whose `first_played_at` is on or after 2024-04-28 (the date that field starts being filled in). So it's not just a date cutoff, and the package doesn't show how it's calculated. Open question.
+- **Streaming:** Headliner (300 h+, not yet Star at 500). Go Live time fits that only when counted from a start month between **Nov 2023 and Nov 2024** (466 h since 1 Jan 2024; 2,922 h lifetime). Tracking for badges probably started around then.
+- **Game time:** Seasoned (500 h+, reached 2026-08-18, not yet Ironclad at 1,000). Games whose `first_played_at` is on or after 2024-04-28 (the date that field starts being filled in) already add up to 1,077 h, and lifetime is 3,473 h. So it's not just a date cutoff, and the package doesn't show how it's calculated. Open question.
 
 Present this as "your badge counts from about 2024; here's everything", not as Discord being wrong.
 
 ## Prototype
 
-`scripts/stats.py` (stdlib only) has the playtime and streaming logic:
+`scripts/stats.py` (stdlib only) has the playtime, streaming, voice and badge logic:
 
 ```
 python3 scripts/stats.py playtime [data/package] [--csv out.csv]
 python3 scripts/stats.py streams  [data/package] [--since 2024-01-01]
+python3 scripts/stats.py voice    [data/package] [--since 2024-01-01]
+python3 scripts/stats.py badges   [data/package]
 ```

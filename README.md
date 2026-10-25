@@ -5,7 +5,7 @@ Stats from your Discord data package: playtime per game, Go Live and watch time,
 **Status:** research and prototype. The site isn't built yet.
 
 - [`docs/FEATURES.md`](docs/FEATURES.md): feature checklist compared with existing tools, package format notes, and edge cases from their issue trackers.
-- [`scripts/stats.py`](scripts/stats.py): Python prototype of the playtime and streaming parsing (stdlib only).
+- [`scripts/stats.py`](scripts/stats.py): Python prototype of the playtime, streaming, voice and badge parsing (stdlib only).
 
 ## Trying the prototype
 
@@ -17,6 +17,8 @@ Stats from your Discord data package: playtime per game, Go Live and watch time,
 python3 scripts/stats.py playtime            # hours per game
 python3 scripts/stats.py streams             # Go Live / watching / camera time
 python3 scripts/stats.py streams --since 2024-01-01
+python3 scripts/stats.py voice               # time in voice, talking / listening, top servers
+python3 scripts/stats.py badges              # your profile badges vs the package totals
 ```
 
 Game names are looked up from Discord's public application endpoints and cached in `data/cache/`.

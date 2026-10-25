@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Playtime and streaming stats from a Discord data package.
+"""Playtime, streaming and voice stats from a Discord data package.
 
 Prototype for the parsing logic the website will run in the browser.
 Stdlib only.
@@ -7,6 +7,8 @@ Stdlib only.
 Usage:
     python3 scripts/stats.py playtime [PACKAGE_DIR]
     python3 scripts/stats.py streams  [PACKAGE_DIR] [--since YYYY-MM-DD]
+    python3 scripts/stats.py voice    [PACKAGE_DIR] [--since YYYY-MM-DD]
+    python3 scripts/stats.py badges   [PACKAGE_DIR]
 
 PACKAGE_DIR defaults to data/package (the extracted package.zip).
 """
@@ -110,36 +112,48 @@ def cmd_playtime(pkg, out):
         print(f"\nwrote {out}")
 
 
-def iter_events(files, event_type):
-    """Yield events of one type, deduplicated by event_id.
+def iter_events(files, *event_types):
+    """Yield events of the given types, deduplicated by event_id.
 
     The activity folders (modeling/, reporting/, tns/) overlap heavily, so the
     same event shows up in several files.
     """
-    needle = f'"event_type":"{event_type}"'.encode()
+    needles = [f'"event_type":"{t}"'.encode() for t in event_types]
     seen = set()
     for path in files:
         with open(path, "rb") as f:
             for line in f:
-                if needle not in line:
+                if not any(n in line for n in needles):
                     continue
                 d = json.loads(line)
-                if d["event_id"] in seen:
+                if d["event_type"] not in event_types or d["event_id"] in seen:
                     continue
                 seen.add(d["event_id"])
                 yield d
+
+
+def event_ts(d):
+    return d["timestamp"].strip('"')
+
+
+STREAM_ROLES = {
+    ("stream", "streamer"): "You streaming (Go Live)",
+    ("stream", "receiver"): "Watching others' streams",
+    ("default", "sender"): "Your camera on",
+    ("default", "receiver"): "Watching others' cameras",
+}
 
 
 def cmd_streams(pkg, since):
     roles = defaultdict(int)
     sessions = Counter()
     apps = defaultdict(int)
-    years = defaultdict(int)
+    years = defaultdict(lambda: defaultdict(int))
     longest = (0, "", "")
     max_viewers = 0
 
     for d in iter_events(find_event_files(pkg), "video_stream_ended"):
-        ts = d["timestamp"].strip('"')
+        ts = event_ts(d)
         if since and ts < since:
             continue
         sec = int(d.get("duration") or 0)
@@ -147,28 +161,22 @@ def cmd_streams(pkg, since):
         key = (d.get("context"), d.get("participant_type"))
         roles[key] += sec
         sessions[key] += 1
+        years[ts[:4]][key] += sec
         if key != ("stream", "streamer"):
             continue
         app = d.get("share_application_name") or "(screen / window share)"
         apps[app] += sec
-        years[ts[:4]] += sec
         max_viewers = max(max_viewers, int(d.get("max_viewers") or 0))
         if sec > longest[0]:
             longest = (sec, app, ts[:10])
 
-    labels = {
-        ("stream", "streamer"): "You streaming (Go Live)",
-        ("stream", "receiver"): "Watching others' streams",
-        ("default", "sender"): "Your camera on",
-        ("default", "receiver"): "Watching others' cameras",
-    }
     print(f"since {since}\n" if since else "")
-    for key, label in labels.items():
+    for key, label in STREAM_ROLES.items():
         print(f"{label:28} {sessions[key]:7,} sessions  {roles[key] / 3600:8,.0f} h")
 
-    print("\nGo Live by year:")
-    for y, s in sorted(years.items()):
-        print(f"  {y}: {s / 3600:7,.0f} h")
+    print("\nBy year (hours):   Go Live  watching  camera  watching cams")
+    for y, r in sorted(years.items()):
+        print(f"  {y}:  " + "".join(f"{r[k] / 3600:9,.0f}" for k in STREAM_ROLES))
     print(f"\nlongest stream: {longest[0] / 3600:.1f} h of {longest[1]} on {longest[2]}")
     print(f"most viewers on one stream: {max_viewers}")
 
@@ -176,6 +184,191 @@ def cmd_streams(pkg, since):
     print("\nTop streamed:")
     for app, s in sorted(apps.items(), key=lambda x: -x[1])[:20]:
         print(f"  {s / 3600:7,.1f} h  {s / total * 100:4.1f}%  {clean_name(app)}")
+
+
+def num(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def secs(d, key):
+    """Seconds from a voice field: `key` is whole seconds, `key_ms` (newer events) exact."""
+    if d.get(key + "_ms") not in (None, "null"):
+        return num(d[key + "_ms"]) / 1000
+    if d.get(key) not in (None, "null"):
+        return num(d[key])
+    return None
+
+
+def find_index(pkg, marker):
+    """The index.json (id -> name) whose sibling folders contain `marker`."""
+    for p in pkg.rglob("index.json"):
+        index = json.loads(p.read_text(encoding="utf-8"))
+        if any((p.parent / k / marker).exists() or (p.parent / f"c{k}" / marker).exists()
+               for k in list(index)[:5]):
+            return index
+    return {}
+
+
+VOICE_KINDS = {"1": "DM calls", "3": "Group DM calls", "2": "Server voice", "13": "Stage"}
+
+
+def cmd_voice(pkg, since):
+    vd_months, lv_months = defaultdict(float), defaultdict(float)
+    servers, channels, kinds = defaultdict(float), defaultdict(float), defaultdict(float)
+    speaking = listening = connected = 0.0
+    connections = 0
+    longest = (0, "", "")
+
+    for d in iter_events(find_event_files(pkg), "voice_disconnect", "leave_voice_channel"):
+        ts = event_ts(d)
+        if since and ts < since:
+            continue
+        sec = num(d.get("duration")) / 1000  # milliseconds in both event types
+        if d["event_type"] == "leave_voice_channel":
+            lv_months[ts[:7]] += sec
+            continue
+        # voice_disconnect fires once per RTC connection, and Go Live opens a
+        # separate one (context=stream) next to the voice one: skip those.
+        if d.get("context") == "stream":
+            continue
+        vd_months[ts[:7]] += sec
+        connections += 1
+        kinds[VOICE_KINDS.get(d.get("channel_type"), "Unknown (older events)")] += sec
+        if d.get("guild_id") not in (None, "0"):
+            servers[d["guild_id"]] += sec
+        channels[(d.get("guild_id"), d.get("channel_id"))] += sec
+        if sec > longest[0]:
+            longest = (sec, d.get("guild_id"), ts[:10])
+        # Talk / listen time are only measured over the connected part of the
+        # session (duration_connected), which is short of `duration` for some
+        # long 2021-22 sessions, so report them as a share of that.
+        conn = secs(d, "duration_connected")
+        if conn:
+            connected += conn
+            speaking += secs(d, "duration_speaking") or 0
+            listening += secs(d, "duration_listening") or 0
+
+    # Each source has gaps (voice_disconnect barely exists before 2020;
+    # leave_voice_channel lacks `duration` on many events in late 2020 to early
+    # 2021). Both measure the same calls, so take the larger one per month.
+    months = sorted(set(vd_months) | set(lv_months))
+    total = sum(max(vd_months[m], lv_months[m]) for m in months)
+    print(f"since {since}\n" if since else "")
+    print(f"Time in voice: {total / 3600:,.0f} h ({total / 86400:.0f} days), "
+          f"{connections:,} connections")
+
+    print("\nBy year (hours):  voice_disconnect  leave_voice_channel  counted")
+    for y in sorted({m[:4] for m in months}):
+        ms = [m for m in months if m.startswith(y)]
+        vd, lv = sum(vd_months[m] for m in ms), sum(lv_months[m] for m in ms)
+        used = sum(max(vd_months[m], lv_months[m]) for m in ms)
+        print(f"  {y}: {vd / 3600:16,.0f} {lv / 3600:20,.0f} {used / 3600:8,.0f}")
+
+    if connected:
+        print(f"\nTalking:   {speaking / 3600:7,.0f} h ({speaking / connected * 100:.0f}% of connected time)")
+        print(f"Listening: {listening / 3600:7,.0f} h ({listening / connected * 100:.0f}%), "
+              f"measured over {connected / 3600:,.0f} h connected (the two overlap)")
+
+    server_names = find_index(pkg, "guild.json")
+    channel_names = find_index(pkg, "channel.json")
+    print(f"\nlongest connection: {longest[0] / 3600:.1f} h in "
+          f"{server_names.get(longest[1], 'a call') if longest[1] not in (None, '0') else 'a call'} "
+          f"on {longest[2]}")
+
+    print("\nBy kind:")
+    for k, s in sorted(kinds.items(), key=lambda x: -x[1]):
+        print(f"  {s / 3600:7,.0f} h  {k}")
+    print("\nTop servers:")
+    for g, s in sorted(servers.items(), key=lambda x: -x[1])[:10]:
+        print(f"  {s / 3600:7,.0f} h  {server_names.get(g, f'Unknown server ({g})')}")
+    print("\nTop channels:")
+    for (g, c), s in sorted(channels.items(), key=lambda x: -x[1])[:10]:
+        # Messages/index.json only names channels you've sent text messages in.
+        name = channel_names.get(c) or (
+            f"#{c} ({server_names.get(g, g)})" if g not in (None, "0") else f"call {c}")
+        print(f"  {s / 3600:7,.0f} h  {name}")
+
+
+# Profile badge types in user_profile_metadata.owned_badges, with tier
+# thresholds in hours. Type 21 has tiers (sampler ... voyager) but its
+# thresholds aren't known yet.
+BADGES = {
+    19: ("Streaming", [("newcomer", 1), ("fledgling", 5), ("breakout", 20), ("standout", 75),
+                       ("trendsetter", 150), ("headliner", 300), ("star", 500), ("sensation", 1000)]),
+    20: ("Game Time", [("casual", 1), ("recreational", 5), ("dedicated", 20), ("committed", 75),
+                       ("serious", 150), ("devoted", 300), ("seasoned", 500), ("ironclad", 1000)]),
+}
+FIRST_PLAYED_FILLED = "2024-04-28"  # first_played_at is only set for games first played since
+
+
+def stream_start_window(streams, tiers, got):
+    """Month starts S where Go Live hours counted from S fit the badge.
+
+    Every tier obtained at time t needs hours(S..t) >= its threshold, and the
+    next unreached tier needs hours(S..now) below its threshold.
+    """
+    thresholds = dict(tiers)
+    reached = [n for n, _ in tiers if n in got]
+    nxt = next((h for n, h in tiers if n not in got), None)
+    ok = []
+    first = streams[0][0] if streams else "2020-01"
+    y, m = int(first[:4]), int(first[5:7])
+    while f"{y:04}-{m:02}" <= streams[-1][0][:7]:
+        s = f"{y:04}-{m:02}-01"
+        upto = lambda t: sum(sec for ts, sec in streams if s <= ts <= t) / 3600
+        if all(upto(got[n]) >= thresholds[n] for n in reached) and (nxt is None or upto("9") < nxt):
+            ok.append(s)
+        y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+    return ok
+
+
+def cmd_badges(pkg):
+    user = json.loads(find_user_json(pkg).read_text(encoding="utf-8"))
+    owned = (user.get("user_profile_metadata") or {}).get("owned_badges") or []
+    if not owned:
+        print("no profile badges in this package (user_profile_metadata.owned_badges)")
+        return
+
+    stats = user["user_activity_application_statistics"]
+    play_all = sum(s["total_duration"] for s in stats) / 3600
+    play_new = sum(s["total_duration"] for s in stats
+                   if (s.get("first_played_at") or "") >= FIRST_PLAYED_FILLED) / 3600
+    streams = sorted((event_ts(d), int(d.get("duration") or 0))
+                     for d in iter_events(find_event_files(pkg), "video_stream_ended")
+                     if (d.get("context"), d.get("participant_type")) == ("stream", "streamer"))
+    go_live = lambda since="": sum(s for ts, s in streams if ts >= since) / 3600
+
+    for b in owned:
+        badge = b["badge"]
+        tier = badge.get("tier_base", {}).get("tier")
+        got = badge.get("tier_base", {}).get("tier_obtained_at", {})
+        if badge["type"] not in BADGES:
+            # Tiers below the current one were all back-filled with the same
+            # timestamp, so their order can't be read from the dates.
+            print(f"Badge type {badge['type']}: {tier} (thresholds unknown; tiers reached: "
+                  f"{', '.join(sorted(got))})\n")
+            continue
+        name, tiers = BADGES[badge["type"]]
+        hours = dict(tiers)
+        nxt = next(((n, h) for n, h in tiers if n not in got), None)
+        print(f"{name} badge: {tier.title()} ({hours.get(tier, '?')} h+, reached {got.get(tier, '')[:10]})"
+              + (f", next {nxt[0].title()} at {nxt[1]:,} h" if nxt else ""))
+        if badge["type"] == 20:
+            print(f"  lifetime playtime in package:           {play_all:8,.0f} h")
+            print(f"  games first played since {FIRST_PLAYED_FILLED}:   {play_new:8,.0f} h")
+            print("  (the package only has lifetime totals per game, so the badge's start date can't be checked)")
+        else:
+            print(f"  lifetime Go Live in package:   {go_live():8,.0f} h")
+            print(f"  Go Live since 2024-01-01:      {go_live('2024-01-01'):8,.0f} h")
+            ok = stream_start_window(streams, tiers, got)
+            if ok:
+                print(f"  matches counting from {ok[0]}" + (f" to {ok[-1]}" if len(ok) > 1 else ""))
+            else:
+                print("  no start month makes the package's Go Live time match the badge")
+        print()
 
 
 def main():
@@ -187,12 +380,22 @@ def main():
     s = sub.add_parser("streams", help="Go Live / watch / camera time from activity events")
     s.add_argument("package", nargs="?", type=Path, default=ROOT / "data" / "package")
     s.add_argument("--since", help="only count streams on/after this date (YYYY-MM-DD)")
+    v = sub.add_parser("voice", help="time in voice, talk / listen time, top servers")
+    v.add_argument("package", nargs="?", type=Path, default=ROOT / "data" / "package")
+    v.add_argument("--since", help="only count calls on/after this date (YYYY-MM-DD)")
+    b = sub.add_parser("badges", help="profile badges vs the package's playtime and Go Live totals")
+    b.add_argument("package", nargs="?", type=Path, default=ROOT / "data" / "package")
     a = ap.parse_args()
+    sys.stdout.reconfigure(encoding="utf-8")  # server / game names have emoji; Windows consoles default to cp1252
 
     if a.cmd == "playtime":
         cmd_playtime(a.package, a.csv)
-    else:
+    elif a.cmd == "streams":
         cmd_streams(a.package, a.since)
+    elif a.cmd == "voice":
+        cmd_voice(a.package, a.since)
+    else:
+        cmd_badges(a.package)
 
 
 if __name__ == "__main__":
