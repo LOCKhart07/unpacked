@@ -1,5 +1,7 @@
 # Unpacked
 
+[![Netlify Status](https://api.netlify.com/api/v1/badges/3650b28d-614d-4857-9b9c-e0dbe2b8fe18/deploy-status)](https://app.netlify.com/projects/gentle-frangollo-4150ff/deploys)
+
 Stats from your Discord data package: playtime per game, Go Live and watch time, voice, messages, and more. The site processes everything in your browser, so your package never leaves your machine.
 
 **Status:** early. The site reads playtime, streaming, voice and badges; messages and the rest of [the checklist](docs/FEATURES.md) are still to do.
