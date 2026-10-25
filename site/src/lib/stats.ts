@@ -53,6 +53,36 @@ function add(m: Map<string, number>, k: string, v: number) {
   m.set(k, (m.get(k) ?? 0) + v);
 }
 
+// Points for a chart over time: daily for 92 days or less, monthly otherwise.
+export interface Series { unit: "day" | "month"; points: [string, number][] }
+
+// The buckets a range splits into, all set to zero so quiet periods show up.
+// Fixed ranges start at their start; lifetime starts at the first record.
+function buckets(range: Range, first: number, last: number) {
+  const start = Number.isFinite(range.from) ? range.from : first;
+  const end = Math.min(range.to, last + 1);
+  const unit: Series["unit"] = end - start <= 92 * DAY ? "day" : "month";
+  const len = unit === "day" ? 10 : 7;
+  const keys = new Map<string, number>();
+  const step = new Date(unit === "day" ? start : Date.UTC(new Date(start).getUTCFullYear(), new Date(start).getUTCMonth(), 1));
+  while (step.getTime() < end) {
+    keys.set(step.toISOString().slice(0, len), 0);
+    if (unit === "day") step.setUTCDate(step.getUTCDate() + 1);
+    else step.setUTCMonth(step.getUTCMonth() + 1);
+  }
+  return { unit, keys, start, end, key: (t: number) => new Date(t).toISOString().slice(0, len) };
+}
+
+// First and last time in a list (a loop: spreading 100k+ items into Math.min overflows the stack).
+function extent(recs: { t: number }[]): [number, number] {
+  let lo = Infinity, hi = -Infinity;
+  for (const r of recs) { if (r.t < lo) lo = r.t; if (r.t > hi) hi = r.t; }
+  return [lo, hi];
+}
+
+const toSeries = (unit: Series["unit"], m: Map<string, number>): Series =>
+  ({ unit, points: [...m].sort((a, b) => (a[0] < b[0] ? -1 : 1)) });
+
 // ---- Game names --------------------------------------------------------
 
 export const cleanName = (n: string) => n.replace(/[™®]/g, "").trim();
@@ -166,9 +196,13 @@ export function streams(recs: StreamRec[], range: Range, nameOf: (r: StreamRec) 
     maxViewers = Math.max(maxViewers, r.viewers);
     if (!longest || r.sec > longest.sec) longest = r;
   }
+  // Go Live over time.
+  const b = buckets(range, ...extent(sel));
+  if (sel.length) for (const r of sel) if (r.role === 0) add(b.keys, b.key(r.t), r.sec);
   return {
     seconds,
     sessions,
+    series: toSeries(b.unit, sel.length ? b.keys : new Map()),
     byYear: [...byYear].sort((a, b) => a[0] - b[0]),
     topApps: [...apps.values()].sort((a, b) => b.sec - a.sec).slice(0, 15).map((a) => [a.name, a.sec] as [string, number]),
     longest: longest && { sec: longest.sec, t: longest.t, name: nameOf(longest) },
@@ -224,9 +258,17 @@ export function voice(recs: VoiceRec[], range: Range, data: Pick<PackageData, "s
     total += s;
     add(byYear, m.slice(0, 4), s);
   }
+  // Over time, with the same larger-of-two-sources rule per bucket.
+  const b = buckets(range, ...extent(sel));
+  if (sel.length) {
+    const vd = new Map<string, number>(), lv = new Map<string, number>();
+    for (const r of sel) add(r.src === "lv" ? lv : vd, b.key(r.t), r.sec);
+    for (const k of b.keys.keys()) b.keys.set(k, Math.max(vd.get(k) ?? 0, lv.get(k) ?? 0));
+  }
   const serverName = (g: string) => data.serverNames[g] ?? `Unknown server (${g})`;
   return {
     total,
+    series: toSeries(b.unit, sel.length ? b.keys : new Map()),
     connections,
     connected,
     speaking,
@@ -279,7 +321,7 @@ export interface MessageStats {
   groups: [string, number][];
   channels: [string, number][];
   servers: [string, number][];
-  series: { unit: "day" | "month"; points: [string, number][] };
+  series: Series;
   hours: number[]; // 0-23, viewer's local time
   weekdays: number[]; // 0 = Monday
   words: [string, number][];
@@ -332,22 +374,9 @@ export function messages(data: Pick<PackageData, "messages" | "channels">, range
     }
   }
 
-  // Daily points for short ranges, monthly otherwise.
-  // Fixed ranges start at their start (quiet days count); lifetime starts at the first message.
-  const spanStart = Number.isFinite(range.from) ? range.from : first?.t ?? 0;
-  const spanEnd = Math.min(range.to, last === -Infinity ? 0 : last + 1);
-  const unit = spanEnd - spanStart <= 92 * DAY ? "day" : "month";
-  const series = new Map<string, number>();
-  if (first) {
-    // Fill gaps with zeros so quiet periods show up.
-    const step = new Date(unit === "day" ? spanStart : Date.UTC(new Date(spanStart).getUTCFullYear(), new Date(spanStart).getUTCMonth(), 1));
-    while (step.getTime() < spanEnd) {
-      series.set(step.toISOString().slice(0, unit === "day" ? 10 : 7), 0);
-      if (unit === "day") step.setUTCDate(step.getUTCDate() + 1);
-      else step.setUTCMonth(step.getUTCMonth() + 1);
-    }
-    for (const m of sel) add(series, new Date(m.t).toISOString().slice(0, unit === "day" ? 10 : 7), 1);
-  }
+  const b = buckets(range, first?.t ?? 0, last === -Infinity ? -1 : last);
+  if (first) for (const m of sel) add(b.keys, b.key(m.t), 1);
+  const spanStart = b.start, spanEnd = b.end;
 
   const top = (kind: string) => [...byChannel]
     .filter(([c]) => ch[c].kind === kind)
@@ -366,7 +395,7 @@ export function messages(data: Pick<PackageData, "messages" | "channels">, range
     groups: top("group"),
     channels: top("server"),
     servers: sortedTotals(servers, 10),
-    series: { unit, points: [...series].sort((a, b) => (a[0] < b[0] ? -1 : 1)) },
+    series: toSeries(b.unit, first ? b.keys : new Map()),
     hours,
     weekdays,
     words: sortedTotals(words, 40),
