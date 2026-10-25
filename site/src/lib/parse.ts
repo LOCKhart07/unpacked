@@ -395,16 +395,19 @@ const API = "https://discord.com/api/v9/applications";
 export interface Apps {
   names: Record<string, string>; // app id -> name
   icons: Record<string, string>; // app id -> icon hash, see appIcon()
+  aliases: [string, string][]; // [old or alternate name, app id]: Discord renames apps, streams keep the old name
 }
 
 export async function resolveApps(ids: string[], library: Record<string, string>): Promise<Apps> {
   const names: Record<string, string> = {};
   const icons: Record<string, string> = {};
+  const aliases: [string, string][] = [];
   try {
     const res = await fetch(`${API}/detectable`, { cache: "force-cache" });
-    for (const a of (await res.json()) as { id: string; name: string; icon_hash?: string | null }[]) {
+    for (const a of (await res.json()) as { id: string; name: string; icon_hash?: string | null; aliases?: string[] }[]) {
       names[a.id] = a.name;
       if (a.icon_hash) icons[a.id] = a.icon_hash;
+      for (const alias of a.aliases ?? []) aliases.push([alias, a.id]);
     }
   } catch {
     // Offline or blocked: fall through to the library names and lookups.
@@ -427,7 +430,7 @@ export async function resolveApps(ids: string[], library: Record<string, string>
     }
   };
   await Promise.all([worker(), worker(), worker(), worker()]);
-  return { names, icons };
+  return { names, icons, aliases };
 }
 
 // Square game icon on Discord's CDN. The browser fetches it straight from

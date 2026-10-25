@@ -99,11 +99,18 @@ function table(
   total = rows.reduce((s, r) => s + r[1], 0),
   max = rows[0]?.[1] ?? 0,
   fmt: (n: number) => string = hours,
+  icon?: (name: string) => string | null, // image URL per row; rows without one get a blank square
 ) {
   if (!rows.length) return `<p class="muted">Nothing in this range.</p>`;
+  const pic = (name: string) => {
+    if (!icon) return "";
+    const url = icon(name);
+    return url ? `<img class="row-icon" src="${esc(url)}" alt="" width="24" height="24" loading="lazy">`
+      : `<span class="row-icon"></span>`;
+  };
   return `<table class="bars">${rows
     .map(([name, s]) => `<tr>
-      <td class="name">${esc(name)}<span class="bar" style="width:${max ? (s / max) * 100 : 0}%"></span></td>
+      <td class="name">${pic(name)}${esc(name)}<span class="bar" style="width:${max ? (s / max) * 100 : 0}%"></span></td>
       <td class="num">${fmt(s)}</td><td class="num muted">${pct(s, total)}</td></tr>`)
     .join("")}</table>`;
 }
@@ -161,7 +168,7 @@ let redraw: (() => void) | null = null;
 window.addEventListener("hashchange", () => redraw?.());
 
 function render(data: PackageData, apps: Apps) {
-  const { names, icons } = apps;
+  const { names, icons, aliases } = apps;
   const all = ranges(data);
   const play = playtime(data.games, names);
   const badgeRows = badges(data, names);
@@ -171,8 +178,14 @@ function render(data: PackageData, apps: Apps) {
     const icon = ids && gameIcon(ids, icons);
     return icon ? appIcon(icon.id, icon.hash) : null;
   };
+  // Small icons in tables: 64 px covers 24 px at high-DPI.
+  const rowIcon = (name: string) => {
+    byName ??= idsByName(names, play.rows, aliases);
+    const icon = gameIcon(byName.get(canonName(name)) ?? [], icons);
+    return icon ? appIcon(icon.id, icon.hash, 64) : null;
+  };
   const iconForName = (name: string) => {
-    byName ??= idsByName(names, play.rows);
+    byName ??= idsByName(names, play.rows, aliases);
     return iconUrl(byName.get(canonName(name)));
   };
   const who = data.user ? data.user.globalName || data.user.username : "Your package";
@@ -213,9 +226,9 @@ function render(data: PackageData, apps: Apps) {
     <section class="card">
       <h2>Playtime</h2>
       <p class="muted">The package has a single total per game, with no dates, so this can't be split by year.</p>
-      ${table(play.rows.slice(0, 20).map((r) => [r.name, r.seconds]), play.total)}
+      ${table(play.rows.slice(0, 20).map((r) => [r.name, r.seconds]), play.total, undefined, hours, rowIcon)}
       ${play.rows.length > 20 ? `<details><summary>Show all ${play.rows.length} games</summary>${
-        table(play.rows.slice(20).map((r) => [r.name, r.seconds]), play.total, play.rows[0].seconds)}</details>` : ""}
+        table(play.rows.slice(20).map((r) => [r.name, r.seconds]), play.total, play.rows[0].seconds, hours, rowIcon)}</details>` : ""}
     </section>`;
 
   const streaming = () => {
@@ -227,7 +240,7 @@ function render(data: PackageData, apps: Apps) {
         <div class="split">
           <div>
             <h3>What you streamed</h3>
-            ${table(s.topApps, s.seconds[0])}
+            ${table(s.topApps, s.seconds[0], undefined, hours, rowIcon)}
           </div>
           <div>
             ${s.longest ? `<p class="muted">Longest stream: ${hours(s.longest.sec)} of ${
@@ -377,7 +390,11 @@ function render(data: PackageData, apps: Apps) {
 
     // A missing icon just disappears (inline onerror would be blocked by the CSP).
     results.querySelectorAll("img").forEach((img) =>
-      img.addEventListener("error", () => img.remove(), { once: true }));
+      img.addEventListener("error", () => {
+        // Keep table rows aligned with the same blank square rows without an icon get.
+        if (img.classList.contains("row-icon")) img.replaceWith(Object.assign(document.createElement("span"), { className: "row-icon" }));
+        else img.remove();
+      }, { once: true }));
     results.querySelectorAll<HTMLButtonElement>(".chips .chip").forEach((c) =>
       c.addEventListener("click", () => {
         range = all[Number(c.dataset.i)];

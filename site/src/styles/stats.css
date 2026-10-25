@@ -104,3 +104,4 @@ details summary { cursor: pointer; color: var(--accent-2); margin-top: 10px; }
 .tile.has-img { display: flex; align-items: center; gap: 14px; }
 .tile.has-img img { flex: none; width: 56px; height: 56px; border-radius: 12px; object-fit: cover; background: var(--surface-2); }
 .tile.has-img > div { min-width: 0; }
+.row-icon { display: inline-block; width: 24px; height: 24px; border-radius: 6px; margin-right: 10px; vertical-align: middle; background: var(--surface-2); object-fit: cover; }

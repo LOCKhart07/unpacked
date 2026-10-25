@@ -94,16 +94,24 @@ export function gameIcon(ids: string[], icons: Record<string, string>): { id: st
 }
 
 // Streams only record the game's name (share_application_name), so find app
-// ids by name: the user's own games first, then Discord's whole list.
-export function idsByName(names: Record<string, string>, games: GameRow[]): Map<string, string[]> {
+// ids by name: the user's own games first, then Discord's whole list, then
+// aliases (old names of renamed apps, e.g. "Grand Theft Auto V" is now
+// "Grand Theft Auto V Legacy").
+export function idsByName(
+  names: Record<string, string>,
+  games: GameRow[],
+  aliases: [string, string][] = [],
+): Map<string, string[]> {
   const byName = new Map<string, string[]>();
-  for (const g of games) byName.set(canonName(g.name), [...g.ids]);
-  for (const [id, n] of Object.entries(names)) {
-    const k = canonName(n);
+  const put = (name: string, id: string) => {
+    const k = canonName(name);
     const list = byName.get(k);
     if (!list) byName.set(k, [id]);
     else if (!list.includes(id)) list.push(id);
-  }
+  };
+  for (const g of games) for (const id of g.ids) put(g.name, id);
+  for (const [id, n] of Object.entries(names)) put(n, id);
+  for (const [alias, id] of aliases) put(alias, id);
   return byName;
 }
 

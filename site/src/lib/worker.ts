@@ -15,7 +15,7 @@ self.onmessage = async (e: MessageEvent<File>) => {
     post({ type: "progress", phase: "Looking up game names", done: 0, total: 0 });
     const apps = data.games.length || data.streams.length
       ? await resolveApps(data.games.map((g) => g.id), data.libraryNames)
-      : { names: {}, icons: {} };
+      : { names: {}, icons: {}, aliases: [] };
     post({ type: "done", data, apps });
   } catch (err) {
     post({ type: "error", message: err instanceof Error ? err.message : String(err) });
