@@ -5,16 +5,18 @@ Not in priority order, and none of it has to land at once. The full feature list
 ## UI
 
 - [ ] **Redesign the stats page.** It works but looks plain. Make it look good enough to share.
-- [x] **Split the stats page into tabs:** Overview · Games · Streaming · Voice · Badges, with the tab in the URL (`#voice`). Add a Messages tab when message stats exist.
-- [x] **Range selector is confusing.** The range chips now only show on tabs with dated data (Streaming, Voice); the others say "Lifetime totals". The range carries over between those tabs.
+- [x] **Split the stats page into tabs:** Overview · Games · Streaming · Voice · Badges, Messages, with the tab in the URL (`#voice`).
+- [x] **Range selector is confusing.** The range chips now only show on tabs with dated data (Streaming, Voice, Messages); the others say "Lifetime totals". The range carries over between those tabs.
 - [ ] **Highlight the important numbers.** Bigger headline stats, comparisons people get at a glance ("that's 414 days in voice"), and a top-of-page summary.
 - [ ] **Game images.** Show each game's icon next to its name. The detectable apps list already has icon hashes (`cdn.discordapp.com/app-icons/<id>/<icon>.png`). `img-src` in the CSP in `netlify.toml` needs `https://cdn.discordapp.com`.
 
 ## New stats
 
-- [ ] **Messages:** counts, top DMs / channels / servers, messages over time, hour-of-day chart (P1 in FEATURES.md).
-- [ ] **Word chart:** favourite words without stopwords.
-- [ ] **Emoji use:** top emojis, including custom server emojis.
+- [x] **Messages:** counts, top DMs / channels / servers, messages over time, hour-of-day and day-of-week charts.
+- [x] **Word chart:** favourite words, leaving out stopwords, links, code and bot commands.
+- [x] **Emoji use:** top emojis, including custom server emojis.
+- [ ] **Stopwords for other languages.** Only English filler words are left out, so Hinglish chat gives "nai", "hai", "kai" as top words. Add lists for common languages (Hinglish, Spanish, French, German, Portuguese...).
+- [ ] **Show custom emoji images** (`cdn.discordapp.com/emojis/<id>`); the id is in the message text. Needs the same CSP change as game images.
 - [ ] **Everything else from the reference sites** (DDPE, Discord Package, Dumpus). See the checklist in [FEATURES.md](FEATURES.md): sessions / time on Discord, servers, payments, connections, event counts, demo mode, shareable image card, and so on.
 
 ## SEO
@@ -26,6 +28,6 @@ Not in priority order, and none of it has to land at once. The full feature list
 ## Loose ends
 
 - [ ] **Make the repo public.** The footer links to the source and the landing page says "the code is open source", which isn't true while the repo is private.
-- [ ] **Timezones:** daily and yearly totals use UTC. Use each event's `time_zone` and let people override it.
+- [ ] **Timezones:** streaming and voice daily / yearly totals use UTC; the message hour and weekday charts use the viewer's browser timezone. Use each event's `time_zone` and let people override it.
 - [ ] **Accept an extracted folder,** not just the ZIP.
 - [ ] **Turn off the Netlify toolbar** in the Netlify project settings. Its injected inline script shows up as a CSP error in the console.

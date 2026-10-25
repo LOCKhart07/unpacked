@@ -1,7 +1,7 @@
 // Turns parsed records into the numbers the page shows, for a time range.
 // Pure functions: used by the page and by scripts/check.ts.
 
-import type { GameStat, PackageData, StreamRec, VoiceRec } from "./parse.ts";
+import type { GameStat, MessageRec, PackageData, StreamRec, VoiceRec } from "./parse.ts";
 
 export interface Range {
   from: number; // epoch ms, inclusive
@@ -20,6 +20,7 @@ export function ranges(data: PackageData): Range[] {
   let first = end;
   for (const r of data.streams) first = Math.min(first, r.t);
   for (const r of data.voice) first = Math.min(first, r.t);
+  for (const r of data.messages) first = Math.min(first, r.t);
   const years: Range[] = [];
   for (let y = new Date(end).getUTCFullYear(); y >= new Date(first).getUTCFullYear(); y--) {
     years.push({ from: Date.UTC(y, 0, 1), to: Date.UTC(y + 1, 0, 1), label: String(y) });
@@ -180,6 +181,141 @@ export function voice(recs: VoiceRec[], range: Range, data: Pick<PackageData, "s
       const name = data.channelNames[c] ?? (g ? `#${c} (${serverName(g)})` : `Call ${c}`);
       return [name, s] as [string, number];
     }),
+  };
+}
+
+// ---- Messages ----------------------------------------------------------
+
+// Common English words and chat filler left out of "favourite words".
+const STOPWORDS = new Set(`
+a about above after again against all also am an and any are aren as at be because been before being below between
+both but by can cannot could couldn did didn do does doesn doing don down during each few for from further get got
+had hadn has hasn have haven having he her here hers herself him himself his how i if in into is isn it its itself
+just let me more most mustn my myself no nor not now of off on once only or other ought our ours ourselves out over
+own same shan she should shouldn so some such than that the their theirs them themselves then there these they this
+those through to too under until up very was wasn we were weren what when where which while who whom why will with
+won would wouldn you your yours yourself yourselves im ive id ill youre dont didnt doesnt isnt cant wont thats whats
+its yeah yes yep nah ok okay oh lol lmao like one also gonna wanna gotta will just really even still well
+https http www com
+`.trim().split(/\s+/));
+
+const URL_RE = /\b(?:https?|magnet|ftp|steam|discord):\S+/gi;
+const CODE_RE = /```[\s\S]*?```|`[^`\n]*`/g;
+// "$pokesearch x", "!play", "--tts hi", "p!hint", "f!rank": commands typed for bots.
+const COMMAND_RE = /^\s*(?:[!$%&+.,;:>?/\\~-]{1,2}|[a-z]{1,2}[!.;$])[a-z]/i;
+const MENTION_RE = /<(?:@[!&]?|#)\d+>/g;
+const CUSTOM_EMOJI_RE = /<a?:(\w+):\d+>/g;
+const WORD_RE = /\p{L}[\p{L}\p{N}'’]*/gu;
+const PICTO_RE = /\p{Extended_Pictographic}/u;
+const graphemes = new Intl.Segmenter("en", { granularity: "grapheme" });
+
+export interface MessageStats {
+  count: number;
+  chars: number;
+  attachments: number;
+  activeDays: number;
+  perDay: number;
+  dms: [string, number][];
+  groups: [string, number][];
+  channels: [string, number][];
+  servers: [string, number][];
+  series: { unit: "day" | "month"; points: [string, number][] };
+  hours: number[]; // 0-23, viewer's local time
+  weekdays: number[]; // 0 = Monday
+  words: [string, number][];
+  emojis: [string, number][];
+  first: { t: number; where: string; text: string } | null;
+}
+
+export function messages(data: Pick<PackageData, "messages" | "channels">, range: Range): MessageStats {
+  const sel = data.messages.filter(inRange(range));
+  const ch = data.channels;
+  const byChannel = new Map<number, number>();
+  const servers = new Map<string, number>();
+  const days = new Set<string>();
+  const hours = new Array(24).fill(0);
+  const weekdays = new Array(7).fill(0);
+  const words = new Map<string, number>();
+  const emojis = new Map<string, number>();
+  let chars = 0, attachments = 0, first: MessageRec | null = null, last = -Infinity;
+
+  for (const m of sel) {
+    byChannel.set(m.c, (byChannel.get(m.c) ?? 0) + 1);
+    const server = ch[m.c].server;
+    if (ch[m.c].kind === "server" && server) add(servers, server, 1);
+    const d = new Date(m.t);
+    days.add(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`); // local days, like the hour chart
+    hours[d.getHours()]++;
+    weekdays[(d.getDay() + 6) % 7]++;
+    chars += m.text.length;
+    if (m.att) attachments++;
+    if (!first || m.t < first.t) first = m;
+    if (m.t > last) last = m.t;
+
+    let text = m.text;
+    if (text.includes("<")) {
+      for (const e of text.matchAll(CUSTOM_EMOJI_RE)) add(emojis, `:${e[1]}:`, 1);
+      text = text.replace(CUSTOM_EMOJI_RE, " ").replace(MENTION_RE, " ");
+    }
+    if (text.includes(":")) text = text.replace(URL_RE, " ");
+    if (text.includes("`")) text = text.replace(CODE_RE, " ");
+    if (PICTO_RE.test(text)) {
+      for (const { segment } of graphemes.segment(text)) {
+        // U+FE0F (emoji presentation) is sometimes there and sometimes not.
+        if (PICTO_RE.test(segment)) add(emojis, segment.replace(/️/g, ""), 1);
+      }
+    }
+    if (COMMAND_RE.test(text)) continue;
+    for (const w of text.toLowerCase().matchAll(WORD_RE)) {
+      const word = w[0].replace(/['’]/g, "");
+      if (word.length >= 3 && !/\d/.test(word) && !STOPWORDS.has(word)) add(words, word, 1);
+    }
+  }
+
+  // Daily points for short ranges, monthly otherwise.
+  // Fixed ranges start at their start (quiet days count); lifetime starts at the first message.
+  const spanStart = Number.isFinite(range.from) ? range.from : first?.t ?? 0;
+  const spanEnd = Math.min(range.to, last === -Infinity ? 0 : last + 1);
+  const unit = spanEnd - spanStart <= 92 * DAY ? "day" : "month";
+  const series = new Map<string, number>();
+  if (first) {
+    // Fill gaps with zeros so quiet periods show up.
+    const step = new Date(unit === "day" ? spanStart : Date.UTC(new Date(spanStart).getUTCFullYear(), new Date(spanStart).getUTCMonth(), 1));
+    while (step.getTime() < spanEnd) {
+      series.set(step.toISOString().slice(0, unit === "day" ? 10 : 7), 0);
+      if (unit === "day") step.setUTCDate(step.getUTCDate() + 1);
+      else step.setUTCMonth(step.getUTCMonth() + 1);
+    }
+    for (const m of sel) add(series, new Date(m.t).toISOString().slice(0, unit === "day" ? 10 : 7), 1);
+  }
+
+  const top = (kind: string) => [...byChannel]
+    .filter(([c]) => ch[c].kind === kind)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([c, n]) => [kind === "server" && ch[c].server ? `#${ch[c].name} (${ch[c].server})` : ch[c].name, n] as [string, number]);
+
+  const spanDays = Math.max(1, Math.ceil((spanEnd - spanStart) / DAY));
+  return {
+    count: sel.length,
+    chars,
+    attachments,
+    activeDays: days.size,
+    perDay: sel.length / spanDays,
+    dms: top("dm"),
+    groups: top("group"),
+    channels: top("server"),
+    servers: sortedTotals(servers, 10),
+    series: { unit, points: [...series].sort((a, b) => (a[0] < b[0] ? -1 : 1)) },
+    hours,
+    weekdays,
+    words: sortedTotals(words, 40),
+    emojis: sortedTotals(emojis, 24),
+    first: first && {
+      t: first.t,
+      where: ch[first.c].kind === "server" ? `#${ch[first.c].name}${ch[first.c].server ? ` (${ch[first.c].server})` : ""}` : ch[first.c].name,
+      text: first.text,
+    },
   };
 }
 

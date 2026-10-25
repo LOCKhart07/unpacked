@@ -5,7 +5,7 @@
 
 import { openAsBlob } from "node:fs";
 import { parsePackage, resolveAppNames } from "../src/lib/parse.ts";
-import { LIFETIME, badges, hours, playtime, ranges, streams, voice } from "../src/lib/stats.ts";
+import { LIFETIME, badges, hours, messages, playtime, ranges, streams, voice } from "../src/lib/stats.ts";
 
 const path = process.argv[2];
 if (!path) {
@@ -39,6 +39,20 @@ console.log("  top servers:", v.servers.slice(0, 3).map(([n, x]) => `${n} ${hour
 
 const since2024 = ranges(data).find((r) => r.label === "2024")!;
 console.log(`\nvoice 2024: ${hours(voice(data.voice, since2024, data).total)}`);
+
+const m = messages(data, LIFETIME);
+console.log(`\nmessages: ${m.count} in ${data.channels.length} channels, ${m.chars} chars, ${m.attachments} with attachments,`,
+  `${m.activeDays} active days, ${m.perDay.toFixed(1)}/day`);
+console.log("  top DMs:", m.dms.slice(0, 3).map(([n, c]) => `${n} ${c}`).join(", "));
+console.log("  top channels:", m.channels.slice(0, 3).map(([n, c]) => `${n} ${c}`).join(", "));
+console.log("  top servers:", m.servers.slice(0, 3).map(([n, c]) => `${n} ${c}`).join(", "));
+console.log("  groups:", m.groups.map(([n, c]) => `${n} ${c}`).join(", "));
+console.log("  words:", m.words.slice(0, 12).map(([w, c]) => `${w} ${c}`).join(", "));
+console.log("  emojis:", m.emojis.slice(0, 10).map(([e, c]) => `${e} ${c}`).join(", "));
+console.log("  series:", m.series.unit, m.series.points.length, "points; first", m.series.points[0], "| busiest hour:",
+  m.hours.indexOf(Math.max(...m.hours)), "| first message:", m.first && new Date(m.first.t).toISOString(), m.first?.where);
+const m2024 = messages(data, ranges(data).find((r) => r.label === "2024")!);
+console.log(`  2024: ${m2024.count} messages, series ${m2024.series.unit} x${m2024.series.points.length}`);
 
 console.log("\nbadges:");
 for (const b of badges(data, names)) {

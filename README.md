@@ -4,7 +4,7 @@
 
 Stats from your Discord data package: playtime per game, Go Live and watch time, voice, messages, and more. The site processes everything in your browser, so your package never leaves your machine.
 
-**Status:** early. The site reads playtime, streaming, voice and badges; messages and the rest of [the checklist](docs/FEATURES.md) are still to do.
+**Status:** early. The site reads playtime, streaming, voice, messages and badges; the rest of [the checklist](docs/FEATURES.md) is still to do.
 
 - [`site/`](site/): the website. Astro static pages plus plain TypeScript; the package is parsed in a Web Worker with the browser's own `DecompressionStream`, no other dependencies.
 - [`docs/TODO.md`](docs/TODO.md): what's next (UI, new stats, SEO, loose ends).

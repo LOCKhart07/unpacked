@@ -3,7 +3,8 @@
 
 import type { PackageData } from "./parse.ts";
 import {
-  BADGE_START, LIFETIME, STREAM_ROLE_LABELS, badges, hours, pct, playtime, ranges, streams, voice, type Range,
+  BADGE_START, LIFETIME, STREAM_ROLE_LABELS, badges, hours, messages, pct, playtime, ranges, streams, voice,
+  type MessageStats, type Range,
 } from "./stats.ts";
 import type { WorkerMessage } from "./worker.ts";
 
@@ -90,13 +91,42 @@ cancel.addEventListener("click", () => {
 
 // ---- Rendering ---------------------------------------------------------
 
-function table(rows: [string, number][], total = rows.reduce((s, r) => s + r[1], 0), max = rows[0]?.[1] ?? 0) {
+const count = (n: number) => n.toLocaleString("en-US");
+
+function table(
+  rows: [string, number][],
+  total = rows.reduce((s, r) => s + r[1], 0),
+  max = rows[0]?.[1] ?? 0,
+  fmt: (n: number) => string = hours,
+) {
   if (!rows.length) return `<p class="muted">Nothing in this range.</p>`;
   return `<table class="bars">${rows
     .map(([name, s]) => `<tr>
       <td class="name">${esc(name)}<span class="bar" style="width:${max ? (s / max) * 100 : 0}%"></span></td>
-      <td class="num">${hours(s)}</td><td class="num muted">${pct(s, total)}</td></tr>`)
+      <td class="num">${fmt(s)}</td><td class="num muted">${pct(s, total)}</td></tr>`)
     .join("")}</table>`;
+}
+
+// Vertical bar chart. `label` picks the axis label for a point ("" = none),
+// so long series only label a few points; the tooltip always has the full key.
+function columns(points: [string, number][], label: (key: string, i: number) => string = (k) => k) {
+  if (!points.length) return `<p class="muted">Nothing in this range.</p>`;
+  const max = Math.max(...points.map((p) => p[1])) || 1;
+  return `<div class="cols">${points
+    .map(([key, n], i) => `<div class="col" title="${esc(key)}: ${count(n)}">
+      <span class="col-bar" style="height:${(n / max) * 100}%"></span>
+      <span class="col-label">${esc(label(key, i))}</span></div>`)
+    .join("")}</div>`;
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function seriesChart(s: MessageStats["series"]) {
+  const pts = s.points;
+  if (s.unit === "day") return columns(pts, (k, i) => (i % 7 === 0 ? k.slice(5) : ""));
+  // Many months: label each January with its year. A year or less: month names.
+  if (pts.length > 18) return columns(pts, (k, i) => (k.endsWith("-01") || i === 0 ? k.slice(0, 4) : ""));
+  return columns(pts, (k) => MONTHS[Number(k.slice(5, 7)) - 1]);
 }
 
 function tile(label: string, value: string, sub = "") {
@@ -115,6 +145,7 @@ const TABS = [
   { id: "games", label: "Games", ranged: false },
   { id: "streaming", label: "Streaming", ranged: true },
   { id: "voice", label: "Voice", ranged: true },
+  { id: "messages", label: "Messages", ranged: true },
   { id: "badges", label: "Badges", ranged: false },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
@@ -132,10 +163,17 @@ function render(data: PackageData, names: Record<string, string>) {
   const who = data.user ? data.user.globalName || data.user.username : "Your package";
   // Shared by the ranged tabs, so switching between Streaming and Voice keeps it.
   let range: Range = LIFETIME;
+  // Word and emoji counting goes over every message, so keep results per range.
+  const messageCache = new Map<string, MessageStats>();
+  const messagesFor = (r: Range) => {
+    if (!messageCache.has(r.label)) messageCache.set(r.label, messages(data, r));
+    return messageCache.get(r.label)!;
+  };
 
   const overview = () => {
     const s = streams(data.streams, LIFETIME);
     const v = voice(data.voice, LIFETIME, data);
+    const m = messagesFor(LIFETIME);
     const top = (rows: [string, number][]) => rows[0] ? `${rows[0][0]}` : "–";
     return `
       <div class="tiles">
@@ -144,6 +182,7 @@ function render(data: PackageData, names: Record<string, string>) {
         ${tile("Watching streams", hours(s.seconds[1]))}
         ${tile("In voice", hours(v.total), `${v.connections.toLocaleString()} connections`)}
         ${tile("Talking", hours(v.speaking), `${pct(v.speaking, v.connected)} of connected time`)}
+        ${tile("Messages sent", count(m.count), `${m.perDay.toFixed(1)} a day`)}
       </div>
       <div class="tiles">
         ${tile("Most played game", play.rows[0]?.name ?? "–", play.rows[0] ? hours(play.rows[0].seconds) : "")}
@@ -212,6 +251,73 @@ function render(data: PackageData, names: Record<string, string>) {
       </section>`;
   };
 
+  const messagesTab = () => {
+    if (!data.channels.length) return `<p class="muted">There's no Messages folder in this package.</p>`;
+    const m = messagesFor(range);
+    if (!m.count) return `<p class="muted">No messages in this range.</p>`;
+    const busiest = m.hours.indexOf(Math.max(...m.hours));
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const maxWord = m.words[0]?.[1] ?? 1;
+    return `
+      <div class="tiles">
+        ${tile("Messages sent", count(m.count), `${m.perDay.toFixed(1)} a day`)}
+        ${tile("Characters typed", count(m.chars), `${Math.round(m.chars / m.count)} per message`)}
+        ${tile("Days you sent something", count(m.activeDays))}
+        ${tile("With attachments", count(m.attachments), pct(m.attachments, m.count))}
+        ${tile("Busiest hour", `${String(busiest).padStart(2, "0")}:00`, tz)}
+      </div>
+      <section class="card">
+        <h3>Messages over time</h3>
+        ${seriesChart(m.series)}
+        <div class="split">
+          <div>
+            <h3>Hour of day <span class="muted small">(${esc(tz)})</span></h3>
+            ${columns(m.hours.map((n, h) => [`${String(h).padStart(2, "0")}:00`, n] as [string, number]),
+              (k, i) => (i % 3 === 0 ? k.slice(0, 2) : ""))}
+          </div>
+          <div>
+            <h3>Day of week</h3>
+            ${columns(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d, i) => [d, m.weekdays[i]] as [string, number]))}
+          </div>
+        </div>
+      </section>
+      <section class="card">
+        <div class="split">
+          <div>
+            <h3>Top DMs</h3>
+            ${table(m.dms, m.count, undefined, count)}
+            ${m.groups.length ? `<h3>Group DMs</h3>${table(m.groups, m.count, undefined, count)}` : ""}
+          </div>
+          <div>
+            <h3>Top servers</h3>
+            ${table(m.servers, m.count, undefined, count)}
+            <h3>Top channels</h3>
+            ${table(m.channels, m.count, undefined, count)}
+          </div>
+        </div>
+      </section>
+      <section class="card">
+        <div class="split">
+          <div>
+            <h3>Favourite words</h3>
+            <p class="cloud">${m.words.map(([w, n]) =>
+              `<span style="font-size:${(0.85 + (n / maxWord) * 0.9).toFixed(2)}rem" title="${count(n)}×">${esc(w)}</span>`).join(" ")}</p>
+            <p class="muted small">Leaves out common English words, links, code and bot commands.</p>
+          </div>
+          <div>
+            <h3>Emoji</h3>
+            ${m.emojis.length ? `<div class="emoji-grid">${m.emojis.map(([e, n]) =>
+              `<div class="emoji"><span class="${e.startsWith(":") ? "custom" : "glyph"}">${esc(e)}</span><span class="muted">${count(n)}</span></div>`).join("")}</div>`
+              : `<p class="muted">No emoji in this range.</p>`}
+          </div>
+        </div>
+      </section>
+      ${m.first ? `<section class="card">
+        <h3>Oldest message ${range === LIFETIME ? "in the package" : "in this range"}</h3>
+        <p><span class="muted">${esc(date(m.first.t))} · ${esc(m.first.where)}</span><br>${esc(m.first.text.slice(0, 280)) || `<span class="muted">(attachment only)</span>`}</p>
+      </section>` : ""}`;
+  };
+
   const badgesTab = () => badgeRows.length ? `
     <section class="card">
       <p class="muted">Discord's badges probably only count from about ${BADGE_START} (Discord doesn't say; that's the date that best fits the data). Here's how that compares with everything in your package.</p>
@@ -226,7 +332,7 @@ function render(data: PackageData, names: Record<string, string>) {
     </section>` : `<p class="muted">No profile badges in this package.</p>`;
 
   const panels: Record<TabId, () => string> = {
-    overview, games, streaming, voice: voiceTab, badges: badgesTab,
+    overview, games, streaming, voice: voiceTab, messages: messagesTab, badges: badgesTab,
   };
 
   const draw = () => {

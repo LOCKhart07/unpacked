@@ -43,6 +43,21 @@ export interface OwnedBadge {
   tierObtainedAt: Record<string, string>;
 }
 
+export interface Channel {
+  id: string;
+  kind: "dm" | "group" | "server";
+  name: string; // display name: the other user, the group name, or the channel name
+  server: string | null; // server name for server channels
+}
+
+// One message you sent. Only the package owner's messages are in the package.
+export interface MessageRec {
+  t: number;
+  c: number; // index into PackageData.channels
+  text: string;
+  att: boolean; // has attachments
+}
+
 export interface PackageData {
   user: { id: string; username: string; globalName: string | null } | null;
   games: GameStat[];
@@ -50,6 +65,8 @@ export interface PackageData {
   badges: OwnedBadge[];
   streams: StreamRec[];
   voice: VoiceRec[];
+  channels: Channel[];
+  messages: MessageRec[];
   serverNames: Record<string, string>;
   channelNames: Record<string, string>;
   lastEvent: number; // latest event time, about when the package was exported
@@ -123,6 +140,8 @@ export async function parsePackage(zip: Blob, onProgress: (p: Progress) => void 
     badges: [],
     streams: [],
     voice: [],
+    channels: [],
+    messages: [],
     serverNames: {},
     channelNames: {},
     lastEvent: 0,
@@ -157,6 +176,9 @@ export async function parsePackage(zip: Blob, onProgress: (p: Progress) => void 
   if (servers) data.serverNames = JSON.parse(await entryText(zip, servers));
   const channels = findIndex(entries, names, "channel.json");
   if (channels) data.channelNames = JSON.parse(await entryText(zip, channels));
+
+  await readMessages(zip, entries, names, data, onProgress);
+  if (!data.channels.length) missing.push("Messages: needed for message stats.");
 
   // Activity: events-*.json, newline-delimited. New packages split them into
   // modeling/, reporting/ and tns/, which overlap, so dedupe by event_id.
@@ -247,6 +269,122 @@ export async function parsePackage(zip: Blob, onProgress: (p: Progress) => void 
   }
 
   return data;
+}
+
+// ---- Messages --------------------------------------------------------------
+// One folder per channel (c<id>/ in new packages, <id>/ in old ones) with
+// channel.json and messages.json (old packages: messages.csv). Timestamps are
+// UTC without a zone marker ("2024-07-10 16:45:23").
+
+function messageTime(ts: string): number {
+  const s = ts.trim().replace(" ", "T");
+  return Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : s + "Z");
+}
+
+// Minimal RFC 4180 parser for the old messages.csv (quoted fields can hold
+// commas, quotes and newlines).
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else quoted = false;
+      } else field += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === ",") {
+      row.push(field);
+      field = "";
+    } else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+    } else field += ch;
+  }
+  if (field || row.length) rows.push([...row, field]);
+  return rows;
+}
+
+// index.json says "channel, server", "Direct Message with name" or "None".
+function channelInfo(
+  ch: { id: string; type?: string; name?: string | null; recipients?: string[]; guild?: { name?: string } },
+  indexName: string | undefined,
+  serverNames: string[],
+  ownId: string | undefined,
+): Channel {
+  const type = String(ch.type ?? "");
+  if (type === "DM" || type === "1") {
+    let name = indexName?.replace(/^Direct Message with /, "") ?? "";
+    const other = ch.recipients?.find((r) => r !== ownId);
+    if (!name || name === "Unknown Participant") name = other ? `Unknown user (${other})` : `DM ${ch.id}`;
+    return { id: ch.id, kind: "dm", name, server: null };
+  }
+  if (type === "GROUP_DM" || type === "3") {
+    const name = ch.name || (indexName && indexName !== "None" ? indexName : "")
+      || `Group DM (${ch.recipients?.length ?? "?"} people)`;
+    return { id: ch.id, kind: "group", name, server: null };
+  }
+  let server = ch.guild?.name ?? serverNames.find((s) => indexName?.endsWith(`, ${s}`)) ?? null;
+  let name = ch.name ?? "";
+  if (indexName) {
+    // Servers you've left aren't in Servers/index.json; split at the last ", ".
+    if (!server && indexName.includes(", ")) server = indexName.slice(indexName.lastIndexOf(", ") + 2);
+    if (!name) name = server && indexName.endsWith(`, ${server}`) ? indexName.slice(0, -server.length - 2) : indexName;
+  }
+  return { id: ch.id, kind: "server", name: name || `#${ch.id}`, server };
+}
+
+async function readMessages(
+  zip: Blob,
+  entries: ZipEntry[],
+  names: Set<string>,
+  data: PackageData,
+  onProgress: (p: Progress) => void,
+) {
+  const folders = entries.filter((e) => base(e.name) === "channel.json"
+    && (names.has(dir(e.name) + "messages.json") || names.has(dir(e.name) + "messages.csv")));
+  const byName = new Map(entries.map((e) => [e.name, e]));
+  const serverNames = Object.values(data.serverNames).sort((a, b) => b.length - a.length);
+  let done = 0;
+  for (const chEntry of folders) {
+    if (done++ % 50 === 0) onProgress({ phase: "Reading messages", done, total: folders.length });
+    let ch;
+    try {
+      ch = JSON.parse(await entryText(zip, chEntry));
+    } catch {
+      continue;
+    }
+    const c = data.channels.length;
+    data.channels.push(channelInfo(ch, data.channelNames[ch.id], serverNames, data.user?.id));
+
+    const json = byName.get(dir(chEntry.name) + "messages.json");
+    if (json) {
+      // IDs are numbers above 2^53 and lose precision in JSON.parse; they're not used.
+      for (const m of JSON.parse(await entryText(zip, json)) as Record<string, unknown>[]) {
+        const t = messageTime(String(m.Timestamp ?? ""));
+        if (!Number.isFinite(t)) continue;
+        data.messages.push({ t, c, text: String(m.Contents ?? ""), att: !!m.Attachments });
+      }
+      continue;
+    }
+    const rows = parseCsv(await entryText(zip, byName.get(dir(chEntry.name) + "messages.csv")!));
+    const head = rows.shift()?.map((h) => h.trim()) ?? [];
+    const [ti, ci, ai] = ["Timestamp", "Contents", "Attachments"].map((h) => head.indexOf(h));
+    for (const r of rows) {
+      const t = messageTime(r[ti] ?? "");
+      if (!Number.isFinite(t)) continue;
+      data.messages.push({ t, c, text: r[ci] ?? "", att: !!r[ai] });
+    }
+  }
+  for (const m of data.messages) if (m.t > data.lastEvent) data.lastEvent = m.t;
 }
 
 // Game names aren't in the package, only application ids. Resolve them from
