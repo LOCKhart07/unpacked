@@ -4,7 +4,7 @@ import Base from "../layouts/Base.astro";
 
 <Base
   title="How to request your Discord data package (2026 guide) · Unpacked"
-  description="Step-by-step: request your data package from Discord, what's inside the ZIP, how long it takes, and which sections you need for playtime, streaming and voice stats."
+  description="Step-by-step on desktop and mobile: request your data package from Discord, how long it takes (up to 30 days), what's inside the ZIP, and which sections you need for playtime, streaming and voice stats."
 >
   <article class="wrap prose">
     <h1>How to request your Discord data package</h1>
@@ -14,22 +14,45 @@ import Base from "../layouts/Base.astro";
       come from.
     </p>
 
+    <h2>Before you start</h2>
+    <ul>
+      <li>Your account needs a <strong>verified email address</strong>.</li>
+      <li>
+        The download link goes to the email on your account <em>when you make the request</em>. Changing your email
+        afterwards won't redirect it.
+      </li>
+      <li>You can only have one request open at a time.</li>
+      <li>Disabling or deleting your account before the link arrives cancels the request.</li>
+    </ul>
+
     <h2>1. Request it in Discord</h2>
+    <h3>On a computer (desktop app or browser)</h3>
     <ol>
-      <li>Open Discord on your computer and go to <strong>User Settings</strong> (the gear next to your name).</li>
+      <li>Click the <strong>gear</strong> in the lower-left corner to open User Settings.</li>
       <li>Open <strong>Data &amp; Privacy</strong>.</li>
-      <li>Scroll to <strong>Request Data</strong>.</li>
+      <li>Under <strong>Request your data</strong>, click <strong>Request Data</strong>.</li>
       <li>
         Choose what to include. For the stats on this site, include at least <strong>Account</strong> and
         <strong>Activity</strong>. Messages and Servers add server and channel names.
       </li>
-      <li>Confirm the request.</li>
+      <li>Submit the request.</li>
     </ol>
+    <h3>On your phone</h3>
+    <ol>
+      <li>Tap your <strong>avatar</strong> in the lower-right corner, then the <strong>gear</strong> in the upper-right.</li>
+      <li>Tap <strong>Data &amp; Privacy</strong>.</li>
+      <li>Under <strong>Request your data</strong>, tap <strong>Request all of my data</strong> and confirm.</li>
+    </ol>
+    <p class="muted">
+      The phone app always requests everything; picking sections only works on a computer. Either is fine for this site.
+      Discord's own steps, with screenshots:
+      <a href="https://support.discord.com/hc/en-us/articles/360004027692-Requesting-a-Copy-of-your-Data" target="_blank" rel="noopener">Requesting a Copy of your Data</a>.
+    </p>
 
     <h2>2. Wait for the email</h2>
     <p>
-      Discord emails a download link when the package is ready. It often takes a few days, and can take longer. The link
-      expires after a while, so download the ZIP when it arrives.
+      Discord emails a download link when the package is ready. Discord says this can take <strong>up to 30 days</strong>,
+      though it's often much quicker. The link expires after a while, so download the ZIP when it arrives.
     </p>
 
     <h2>3. Open it here</h2>
@@ -45,6 +68,10 @@ import Base from "../layouts/Base.astro";
       <li><strong>Messages:</strong> your messages, one folder per channel or DM.</li>
       <li><strong>Servers:</strong> the servers you're in.</li>
     </ul>
+    <p class="muted">
+      Discord describes every file in
+      <a href="https://support.discord.com/hc/en-us/articles/360004957991-Your-Discord-Data-Package" target="_blank" rel="noopener">Your Discord Data Package</a>.
+    </p>
     <p class="muted">
       Folder names are in the language your Discord is set to (for example <code>Compte/</code> in French). That's
       fine: the stats page finds files by what's in them.
