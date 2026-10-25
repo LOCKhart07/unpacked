@@ -19,7 +19,9 @@ export interface StreamRec {
   t: number; // epoch ms
   role: number;
   sec: number;
-  app: string; // share_application_name, "" for screen / window share
+  app: string; // share_application_name: the game's name or a window title, "" for screen / window share
+  appId: string | null; // share_application_id, on most game streams
+  exe: string | null; // share_application_executable, e.g. "javaw.exe"
   viewers: number;
 }
 
@@ -210,6 +212,8 @@ export async function parsePackage(zip: Blob, onProgress: (p: Progress) => void 
         role,
         sec: num(d.duration),
         app: String(d.share_application_name ?? ""),
+        appId: d.share_application_id ? String(d.share_application_id) : null,
+        exe: d.share_application_executable ? String(d.share_application_executable).toLowerCase() : null,
         viewers: num(d.max_viewers),
       });
       return;
@@ -396,19 +400,42 @@ export interface Apps {
   names: Record<string, string>; // app id -> name
   icons: Record<string, string>; // app id -> icon hash, see appIcon()
   aliases: [string, string][]; // [old or alternate name, app id]: Discord renames apps, streams keep the old name
+  exeIds: Record<string, string>; // executable file name -> app id, for the executables asked about
 }
 
-export async function resolveApps(ids: string[], library: Record<string, string>): Promise<Apps> {
+// `exes`: executable names to identify (streams without an app id). Discord's
+// list gives each app's executables, either as an exact file name (">javaw.exe")
+// or as the end of a path ("minecraft/runtime/.../javaw.exe").
+export async function resolveApps(ids: string[], library: Record<string, string>, exes: string[] = []): Promise<Apps> {
   const names: Record<string, string> = {};
   const icons: Record<string, string> = {};
   const aliases: [string, string][] = [];
+  const exeIds: Record<string, string> = {};
+  const wanted = new Set(exes);
+  const byPath = new Map<string, Set<string>>(); // file name -> apps listing it at the end of a path
   try {
     const res = await fetch(`${API}/detectable`, { cache: "force-cache" });
-    for (const a of (await res.json()) as { id: string; name: string; icon_hash?: string | null; aliases?: string[] }[]) {
+    type Detectable = {
+      id: string; name: string; icon_hash?: string | null; aliases?: string[];
+      executables?: { name?: string; is_launcher?: boolean }[];
+    };
+    for (const a of (await res.json()) as Detectable[]) {
       names[a.id] = a.name;
       if (a.icon_hash) icons[a.id] = a.icon_hash;
       for (const alias of a.aliases ?? []) aliases.push([alias, a.id]);
+      for (const e of a.executables ?? []) {
+        if (!e.name || e.is_launcher) continue;
+        const exe = e.name.toLowerCase();
+        if (exe.startsWith(">")) {
+          if (wanted.has(exe.slice(1))) exeIds[exe.slice(1)] ??= a.id;
+        } else {
+          const file = exe.slice(exe.lastIndexOf("/") + 1);
+          if (wanted.has(file)) byPath.set(file, (byPath.get(file) ?? new Set()).add(a.id));
+        }
+      }
     }
+    // A file name only found inside paths counts if a single app has it.
+    for (const [file, apps] of byPath) if (!exeIds[file] && apps.size === 1) exeIds[file] = [...apps][0];
   } catch {
     // Offline or blocked: fall through to the library names and lookups.
   }
@@ -430,7 +457,7 @@ export async function resolveApps(ids: string[], library: Record<string, string>
     }
   };
   await Promise.all([worker(), worker(), worker(), worker()]);
-  return { names, icons, aliases };
+  return { names, icons, aliases, exeIds };
 }
 
 // Square game icon on Discord's CDN. The browser fetches it straight from

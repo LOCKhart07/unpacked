@@ -119,6 +119,7 @@ Support_Tickets/
   2. `user.json.library_applications[].application.name`
   3. `GET https://discord.com/api/v9/applications/<id>/rpc` (allows cross-origin requests) for old ids missing from step 1. These turned out to be big ones: Minecraft, GTA V and CS:GO all had legacy ids.
   4. Otherwise show "Unknown app (id)".
+- **Streams: identify the game by `share_application_id`, then `share_application_executable`, then the name.** `share_application_name` is sometimes a window title, not the game: Minecraft Java streams show up as "Multiplayer (3rd-party Server)" with executable `javaw.exe`. Discord's detectable list gives each app's executables, either an exact file name (`>javaw.exe`, Minecraft) or the end of a path. Streams also keep the name the game had at the time ("Tom Clancy's Rainbow Six Siege"), so match recorded names against the detectable list's `aliases` too.
 - **One game can have several app ids** (old and new ids, Legacy/Enhanced editions). Merge by normalised name, ignoring ™/®, colons and "Game of the Year Edition".
 - **Playtime only has lifetime totals per game.** There's no per-day breakdown, so playtime can't be split by year or time range. Streams, voice and messages can.
 - **Durations:** `total_duration` and `video_stream_ended.duration` are in seconds. Voice durations are mixed; see [Voice](#voice).

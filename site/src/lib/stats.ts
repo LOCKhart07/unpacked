@@ -1,7 +1,7 @@
 // Turns parsed records into the numbers the page shows, for a time range.
 // Pure functions: used by the page and by scripts/check.ts.
 
-import type { GameStat, MessageRec, PackageData, StreamRec, VoiceRec } from "./parse.ts";
+import type { Apps, GameStat, MessageRec, PackageData, StreamRec, VoiceRec } from "./parse.ts";
 
 export interface Range {
   from: number; // epoch ms, inclusive
@@ -127,12 +127,29 @@ export const STREAM_ROLE_LABELS = [
   "Watching others' cameras",
 ];
 
-export function streams(recs: StreamRec[], range: Range) {
+// What a Go Live stream showed. share_application_name is sometimes a window
+// title rather than the game ("Multiplayer (3rd-party Server)" is Minecraft's),
+// so identify the game like Discord does: by app id, then by executable, then
+// by the recorded name or an alias of it (apps get renamed). Uses the app's
+// current name, as Games does.
+export function streamNamer(apps: Pick<Apps, "names" | "exeIds" | "aliases">): (r: StreamRec) => string {
+  const aliasIds = new Map<string, string>();
+  for (const [alias, id] of apps.aliases) if (!aliasIds.has(canonName(alias))) aliasIds.set(canonName(alias), id);
+  return (r) => {
+    const id = (r.appId && apps.names[r.appId] ? r.appId : undefined)
+      ?? (r.exe ? apps.exeIds[r.exe] : undefined)
+      ?? (r.app ? aliasIds.get(canonName(r.app)) : undefined);
+    if (id && apps.names[id]) return cleanName(apps.names[id]);
+    return r.app ? cleanName(r.app) : SCREEN_SHARE;
+  };
+}
+
+export function streams(recs: StreamRec[], range: Range, nameOf: (r: StreamRec) => string = (r) => r.app || SCREEN_SHARE) {
   const sel = recs.filter(inRange(range));
   const seconds = [0, 0, 0, 0];
   const sessions = [0, 0, 0, 0];
   const byYear = new Map<number, number[]>();
-  const apps = new Map<string, number>();
+  const apps = new Map<string, { name: string; sec: number }>(); // keyed by canonName
   let longest: StreamRec | null = null;
   let maxViewers = 0;
   for (const r of sel) {
@@ -142,7 +159,10 @@ export function streams(recs: StreamRec[], range: Range) {
     y[r.role] += r.sec;
     byYear.set(year(r.t), y);
     if (r.role !== 0) continue;
-    add(apps, r.app || SCREEN_SHARE, r.sec);
+    const name = nameOf(r);
+    const app = apps.get(canonName(name)) ?? { name, sec: 0 };
+    app.sec += r.sec;
+    apps.set(canonName(name), app);
     maxViewers = Math.max(maxViewers, r.viewers);
     if (!longest || r.sec > longest.sec) longest = r;
   }
@@ -150,8 +170,8 @@ export function streams(recs: StreamRec[], range: Range) {
     seconds,
     sessions,
     byYear: [...byYear].sort((a, b) => a[0] - b[0]),
-    topApps: sortedTotals(apps, 15).map(([n, s]) => [cleanName(n), s] as [string, number]),
-    longest,
+    topApps: [...apps.values()].sort((a, b) => b.sec - a.sec).slice(0, 15).map((a) => [a.name, a.sec] as [string, number]),
+    longest: longest && { sec: longest.sec, t: longest.t, name: nameOf(longest) },
     maxViewers,
   };
 }

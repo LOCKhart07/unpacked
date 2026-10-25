@@ -4,7 +4,7 @@
 import { appIcon, type Apps, type PackageData } from "./parse.ts";
 import {
   BADGE_START, LIFETIME, SCREEN_SHARE, STREAM_ROLE_LABELS, badges, canonName, dataSpan, gameIcon, hours, idsByName, messages, pct, playtime,
-  ranges, streams, voice,
+  ranges, streamNamer, streams, voice,
   type MessageStats, type Range,
 } from "./stats.ts";
 import type { WorkerMessage } from "./worker.ts";
@@ -169,6 +169,7 @@ window.addEventListener("hashchange", () => redraw?.());
 
 function render(data: PackageData, apps: Apps) {
   const { names, icons, aliases } = apps;
+  const streamName = streamNamer(apps);
   const all = ranges(data);
   const play = playtime(data.games, names);
   const badgeRows = badges(data, names);
@@ -199,7 +200,7 @@ function render(data: PackageData, apps: Apps) {
   };
 
   const overview = () => {
-    const s = streams(data.streams, LIFETIME);
+    const s = streams(data.streams, LIFETIME, streamName);
     const v = voice(data.voice, LIFETIME, data);
     const m = messagesFor(LIFETIME);
     const top = (rows: [string, number][]) => rows[0] ? `${rows[0][0]}` : "–";
@@ -232,7 +233,7 @@ function render(data: PackageData, apps: Apps) {
     </section>`;
 
   const streaming = () => {
-    const s = streams(data.streams, range);
+    const s = streams(data.streams, range, streamName);
     return `
       <div class="tiles">${STREAM_ROLE_LABELS.map((l, i) =>
         tile(l, hours(s.seconds[i]), `${s.sessions[i].toLocaleString()} sessions`)).join("")}</div>
@@ -244,7 +245,7 @@ function render(data: PackageData, apps: Apps) {
           </div>
           <div>
             ${s.longest ? `<p class="muted">Longest stream: ${hours(s.longest.sec)} of ${
-              esc(s.longest.app || "a screen share")} on ${esc(date(s.longest.t))}.
+              esc(s.longest.name === SCREEN_SHARE ? "a screen share" : s.longest.name)} on ${esc(date(s.longest.t))}.
               Most viewers on one stream: ${s.maxViewers}.</p>` : ""}
             <h3>By year</h3>
             <table class="plain"><tr class="muted"><td></td><td class="num">Go Live</td><td class="num">Watching</td><td class="num">Camera</td><td class="num">Cams</td></tr>

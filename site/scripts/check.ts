@@ -5,7 +5,7 @@
 
 import { openAsBlob } from "node:fs";
 import { parsePackage, resolveApps } from "../src/lib/parse.ts";
-import { LIFETIME, badges, hours, messages, playtime, ranges, streams, voice } from "../src/lib/stats.ts";
+import { LIFETIME, badges, hours, messages, playtime, ranges, streamNamer, streams, voice } from "../src/lib/stats.ts";
 
 const path = process.argv[2];
 if (!path) {
@@ -22,15 +22,20 @@ console.log("missing:", data.missing.length ? data.missing : "nothing");
 console.log("user:", data.user?.username, "| streams:", data.streams.length, "| voice:", data.voice.length,
   "| last event:", new Date(data.lastEvent).toISOString());
 
-const { names, icons } = await resolveApps(data.games.map((g) => g.id), data.libraryNames);
+const streamIds = data.streams.map((s) => s.appId).filter((id): id is string => !!id);
+const exes = [...new Set(data.streams.filter((s) => !s.appId && s.exe).map((s) => s.exe!))];
+const apps = await resolveApps([...new Set([...data.games.map((g) => g.id), ...streamIds])], data.libraryNames, exes);
+const { names } = apps;
 const p = playtime(data.games, names);
 console.log(`\nplaytime: ${p.rows.length} games, ${hours(p.total)}`);
 for (const r of p.rows.slice(0, 3)) console.log(`  ${r.name}: ${hours(r.seconds)}`);
 
-const s = streams(data.streams, LIFETIME);
+const s = streams(data.streams, LIFETIME, streamNamer(apps));
 console.log(`\nstreams: Go Live ${hours(s.seconds[0])} (${s.sessions[0]}), watching ${hours(s.seconds[1])},`,
   `camera ${hours(s.seconds[2])}, watching cams ${hours(s.seconds[3])}`);
 console.log("  by year:", s.byYear.map(([y, r]) => `${y}: ${hours(r[0])}`).join(", "));
+console.log("  top streamed:", s.topApps.slice(0, 16).map(([n, x]) => `${n} ${hours(x)}`).join(" | "));
+console.log("  executables matched:", apps.exeIds);
 
 const v = voice(data.voice, LIFETIME, data);
 console.log(`\nvoice: ${hours(v.total)}, ${v.connections} connections, talking ${hours(v.speaking)},`,
