@@ -7,6 +7,7 @@ import {
   ranges, streamNamer, streams, voice,
   type MessageStats, type Range, type Series,
 } from "./stats.ts";
+import { wordCloud } from "./wordcloud.ts";
 import type { WorkerMessage } from "./worker.ts";
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
@@ -369,13 +370,18 @@ function render(data: PackageData, apps: Apps) {
       </section>`;
   };
 
+  // Phones get fewer words in a squarer cloud, so the small ones stay readable.
+  const cloud = (words: [string, number][]) => {
+    const narrow = results.clientWidth < 600;
+    return wordCloud(narrow ? words.slice(0, 40) : words, getComputedStyle(document.body).fontFamily, narrow ? 1 : 1.7);
+  };
+
   const messagesTab = () => {
     if (!data.channels.length) return `<p class="muted">There's no Messages folder in this package.</p>`;
     const m = messagesFor(range);
     if (!m.count) return `<p class="muted">No messages in this range.</p>`;
     const busiest = m.hours.indexOf(Math.max(...m.hours));
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const maxWord = m.words[0]?.[1] ?? 1;
     const peak = peakOf(m.series);
     return `
       <div class="tiles">
@@ -418,20 +424,15 @@ function render(data: PackageData, apps: Apps) {
         </div>
       </section>
       <section class="card">
-        <div class="split">
-          <div>
-            <h3>Favourite words</h3>
-            <p class="cloud">${m.words.map(([w, n]) =>
-              `<span style="font-size:${(0.85 + (n / maxWord) * 0.9).toFixed(2)}rem;opacity:${(0.55 + (n / maxWord) * 0.45).toFixed(2)}" title="${count(n)}×">${esc(w)}</span>`).join(" ")}</p>
-            <p class="muted small">Leaves out common English words, links, code and bot commands.</p>
-          </div>
-          <div>
-            <h3>Emoji</h3>
-            ${m.emojis.length ? `<div class="emoji-grid">${m.emojis.map(([e, n]) =>
-              `<div class="emoji"><span class="${e.startsWith(":") ? "custom" : "glyph"}">${esc(e)}</span><span class="muted">${count(n)}</span></div>`).join("")}</div>`
-              : `<p class="muted">No emoji in this range.</p>`}
-          </div>
-        </div>
+        <h2>Favourite words</h2>
+        ${m.words.length ? cloud(m.words) : `<p class="muted">No words in this range.</p>`}
+        <p class="muted small">Hover a word for how often you used it. Leaves out common English words, links, code and bot commands.</p>
+      </section>
+      <section class="card">
+        <h2>Emoji</h2>
+        ${m.emojis.length ? `<div class="emoji-grid">${m.emojis.map(([e, n]) =>
+          `<div class="emoji"><span class="${e.startsWith(":") ? "custom" : "glyph"}">${esc(e)}</span><span class="muted">${count(n)}</span></div>`).join("")}</div>`
+          : `<p class="muted">No emoji in this range.</p>`}
       </section>
       ${m.first ? `<section class="card">
         <h3>Oldest message ${range === LIFETIME ? "in the package" : "in this range"}</h3>

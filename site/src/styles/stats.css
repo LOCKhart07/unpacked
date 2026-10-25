@@ -35,7 +35,10 @@
 .results-head strong { color: var(--text); font-weight: 600; }
 
 /* Tabs and range chips stay in view while scrolling a long tab. */
-.sticky { position: sticky; top: 0; z-index: 5; background: var(--bg); margin-inline: -8px; padding-inline: 8px; }
+/* Not on phones, where the wrapped chips would cover a third of the screen. */
+@media (min-width: 700px) {
+  .sticky { position: sticky; top: 0; z-index: 5; background: var(--bg); margin-inline: -8px; padding-inline: 8px; }
+}
 
 .tabs {
   display: flex;
@@ -151,8 +154,15 @@ table.bars tr.podium .bar { opacity: 0.9; }
 .meter span { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
 .badge-life { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
 
-.cloud { line-height: 1.9; }
-.cloud span { display: inline-block; margin-right: 0.45em; font-weight: 600; }
+.wordcloud { display: block; width: 100%; max-height: 460px; margin-block: 8px 12px; font-weight: 700; }
+.wordcloud text { cursor: default; transition: opacity 0.15s; }
+.wordcloud:hover text { opacity: 0.45; }
+.wordcloud text:hover { opacity: 1; }
+.wc-0 { fill: var(--accent-2); }
+.wc-1 { fill: var(--text); }
+.wc-2 { fill: var(--good); }
+.wc-3 { fill: var(--warn); }
+.wc-4 { fill: #5fb4f0; }
 .emoji-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
 .emoji { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; background: var(--surface-2); border-radius: 10px; font-size: 0.8rem; }
 .emoji .glyph { font-size: 1.6rem; line-height: 1.2; }

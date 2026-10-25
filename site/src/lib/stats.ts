@@ -398,7 +398,7 @@ export function messages(data: Pick<PackageData, "messages" | "channels">, range
     series: toSeries(b.unit, first ? b.keys : new Map()),
     hours,
     weekdays,
-    words: sortedTotals(words, 40),
+    words: sortedTotals(words, 80),
     emojis: sortedTotals(emojis, 24),
     first: first && {
       t: first.t,
