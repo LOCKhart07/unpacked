@@ -32,8 +32,9 @@ import Base from "../layouts/Base.astro";
       <li>Open <strong>Data &amp; Privacy</strong>.</li>
       <li>Under <strong>Request your data</strong>, click <strong>Request Data</strong>.</li>
       <li>
-        Choose what to include. For the stats on this site, include at least <strong>Account</strong> and
-        <strong>Activity</strong>. Messages and Servers add server and channel names.
+        Choose what to include. <strong>Select everything</strong> to get every stat on this site. At the very
+        least, include <strong>Account</strong> (playtime and badges), <strong>Activity</strong> (streaming and voice)
+        and <strong>Messages</strong> (message stats, and server and channel names).
       </li>
       <li>Submit the request.</li>
     </ol>
@@ -44,7 +45,7 @@ import Base from "../layouts/Base.astro";
       <li>Under <strong>Request your data</strong>, tap <strong>Request all of my data</strong> and confirm.</li>
     </ol>
     <p class="muted">
-      The phone app always requests everything; picking sections only works on a computer. Either is fine for this site.
+      The phone app always requests everything, which is what you want here; picking sections only works on a computer.
       Discord's own steps, with screenshots:
       <a href="https://support.discord.com/hc/en-us/articles/360004027692-Requesting-a-Copy-of-your-Data" target="_blank" rel="noopener">Requesting a Copy of your Data</a>.
     </p>
@@ -84,6 +85,7 @@ import Base from "../layouts/Base.astro";
         activity during that time, so there will be gaps.
       </li>
       <li>If you left out the Activity section, streaming and voice stats can't be shown.</li>
+      <li>If you left out Messages, there are no message stats, and voice channels show as numbers instead of names.</li>
     </ul>
 
     <p><a class="button" href="/stats/">Open your package</a></p>
