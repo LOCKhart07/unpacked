@@ -7,6 +7,7 @@ Stats from your Discord data package: playtime per game, Go Live and watch time,
 **Status:** early. The site reads playtime, streaming, voice and badges; messages and the rest of [the checklist](docs/FEATURES.md) are still to do.
 
 - [`site/`](site/): the website. Astro static pages plus plain TypeScript; the package is parsed in a Web Worker with the browser's own `DecompressionStream`, no other dependencies.
+- [`docs/TODO.md`](docs/TODO.md): what's next (UI, new stats, SEO, loose ends).
 - [`docs/FEATURES.md`](docs/FEATURES.md): feature checklist compared with existing tools, package format notes, and edge cases from their issue trackers.
 - [`scripts/stats.py`](scripts/stats.py): Python prototype of the playtime, streaming, voice and badge parsing (stdlib only).
 
