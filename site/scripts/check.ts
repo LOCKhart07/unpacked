@@ -4,7 +4,7 @@
 //   node scripts/check.ts ../data/package.zip
 
 import { openAsBlob } from "node:fs";
-import { parsePackage, resolveAppNames } from "../src/lib/parse.ts";
+import { parsePackage, resolveApps } from "../src/lib/parse.ts";
 import { LIFETIME, badges, hours, messages, playtime, ranges, streams, voice } from "../src/lib/stats.ts";
 
 const path = process.argv[2];
@@ -22,7 +22,7 @@ console.log("missing:", data.missing.length ? data.missing : "nothing");
 console.log("user:", data.user?.username, "| streams:", data.streams.length, "| voice:", data.voice.length,
   "| last event:", new Date(data.lastEvent).toISOString());
 
-const names = await resolveAppNames(data.games.map((g) => g.id), data.libraryNames);
+const { names, icons } = await resolveApps(data.games.map((g) => g.id), data.libraryNames);
 const p = playtime(data.games, names);
 console.log(`\nplaytime: ${p.rows.length} games, ${hours(p.total)}`);
 for (const r of p.rows.slice(0, 3)) console.log(`  ${r.name}: ${hours(r.seconds)}`);

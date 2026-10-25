@@ -13,14 +13,21 @@ export const LIFETIME: Range = { from: -Infinity, to: Infinity, label: "Lifetime
 
 const DAY = 86_400_000;
 
+// First and last dated record (streams, voice, messages): the period the
+// package covers.
+export function dataSpan(data: PackageData): { first: number; last: number } {
+  let first = data.lastEvent;
+  for (const r of data.streams) first = Math.min(first, r.t);
+  for (const r of data.voice) first = Math.min(first, r.t);
+  for (const r of data.messages) first = Math.min(first, r.t);
+  return { first, last: data.lastEvent };
+}
+
 // Ranges are relative to the last event in the package (about the export
 // date), not today, so "last 30 days" means the last 30 days of data.
 export function ranges(data: PackageData): Range[] {
   const end = data.lastEvent + 1;
-  let first = end;
-  for (const r of data.streams) first = Math.min(first, r.t);
-  for (const r of data.voice) first = Math.min(first, r.t);
-  for (const r of data.messages) first = Math.min(first, r.t);
+  const { first } = dataSpan(data);
   const years: Range[] = [];
   for (let y = new Date(end).getUTCFullYear(); y >= new Date(first).getUTCFullYear(); y--) {
     years.push({ from: Date.UTC(y, 0, 1), to: Date.UTC(y + 1, 0, 1), label: String(y) });
@@ -61,6 +68,7 @@ const gameName = (names: Record<string, string>, id: string) => cleanName(names[
 
 export interface GameRow {
   name: string;
+  ids: string[]; // every app id merged into this game
   seconds: number;
   lastPlayed: string;
 }
@@ -69,7 +77,8 @@ export function playtime(games: GameStat[], names: Record<string, string>) {
   const merged = new Map<string, GameRow>();
   for (const g of games) {
     const name = gameName(names, g.id);
-    const row = merged.get(canonName(name)) ?? { name, seconds: 0, lastPlayed: "" };
+    const row = merged.get(canonName(name)) ?? { name, ids: [], seconds: 0, lastPlayed: "" };
+    row.ids.push(g.id);
     row.seconds += g.seconds;
     if ((g.lastPlayed ?? "") > row.lastPlayed) row.lastPlayed = g.lastPlayed ?? "";
     merged.set(canonName(name), row);
@@ -78,7 +87,30 @@ export function playtime(games: GameStat[], names: Record<string, string>) {
   return { rows, total: rows.reduce((s, r) => s + r.seconds, 0) };
 }
 
+// Icon hash for a game: the first of its app ids that has one.
+export function gameIcon(ids: string[], icons: Record<string, string>): { id: string; hash: string } | null {
+  const id = ids.find((i) => icons[i]);
+  return id ? { id, hash: icons[id] } : null;
+}
+
+// Streams only record the game's name (share_application_name), so find app
+// ids by name: the user's own games first, then Discord's whole list.
+export function idsByName(names: Record<string, string>, games: GameRow[]): Map<string, string[]> {
+  const byName = new Map<string, string[]>();
+  for (const g of games) byName.set(canonName(g.name), [...g.ids]);
+  for (const [id, n] of Object.entries(names)) {
+    const k = canonName(n);
+    const list = byName.get(k);
+    if (!list) byName.set(k, [id]);
+    else if (!list.includes(id)) list.push(id);
+  }
+  return byName;
+}
+
 // ---- Streams -----------------------------------------------------------
+
+// Streams with no share_application_name: a screen or window, not a detected game.
+export const SCREEN_SHARE = "Screen or window share";
 
 export const STREAM_ROLE_LABELS = [
   "You streaming (Go Live)",
@@ -102,7 +134,7 @@ export function streams(recs: StreamRec[], range: Range) {
     y[r.role] += r.sec;
     byYear.set(year(r.t), y);
     if (r.role !== 0) continue;
-    add(apps, r.app || "Screen or window share", r.sec);
+    add(apps, r.app || SCREEN_SHARE, r.sec);
     maxViewers = Math.max(maxViewers, r.viewers);
     if (!longest || r.sec > longest.sec) longest = r;
   }

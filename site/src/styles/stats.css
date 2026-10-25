@@ -100,3 +100,7 @@ table.bars .bar { position: absolute; left: 4px; bottom: 3px; height: 4px; borde
 .emoji .custom { font-size: 0.8rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 
 details summary { cursor: pointer; color: var(--accent-2); margin-top: 10px; }
+
+.tile.has-img { display: flex; align-items: center; gap: 14px; }
+.tile.has-img img { flex: none; width: 56px; height: 56px; border-radius: 12px; object-fit: cover; background: var(--surface-2); }
+.tile.has-img > div { min-width: 0; }

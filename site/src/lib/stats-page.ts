@@ -1,9 +1,10 @@
 // The /stats/ page: file input, worker, progress, and rendering the results.
 // Plain DOM; every value from the package goes through esc().
 
-import type { PackageData } from "./parse.ts";
+import { appIcon, type Apps, type PackageData } from "./parse.ts";
 import {
-  BADGE_START, LIFETIME, STREAM_ROLE_LABELS, badges, hours, messages, pct, playtime, ranges, streams, voice,
+  BADGE_START, LIFETIME, SCREEN_SHARE, STREAM_ROLE_LABELS, badges, canonName, dataSpan, gameIcon, hours, idsByName, messages, pct, playtime,
+  ranges, streams, voice,
   type MessageStats, type Range,
 } from "./stats.ts";
 import type { WorkerMessage } from "./worker.ts";
@@ -64,7 +65,7 @@ function start(file: File) {
     } else {
       worker?.terminate();
       worker = null;
-      render(m.data, m.names);
+      render(m.data, m.apps);
     }
   };
   worker.onerror = (e) => fail(`Something went wrong while reading the package: ${e.message}`);
@@ -129,9 +130,12 @@ function seriesChart(s: MessageStats["series"]) {
   return columns(pts, (k) => MONTHS[Number(k.slice(5, 7)) - 1]);
 }
 
-function tile(label: string, value: string, sub = "") {
-  return `<div class="tile"><div class="tile-label">${esc(label)}</div><div class="tile-value">${esc(value)}</div>${
-    sub ? `<div class="tile-sub muted">${esc(sub)}</div>` : ""}</div>`;
+function tile(label: string, value: string, sub = "", img: string | null = null) {
+  const text = `<div class="tile-label">${esc(label)}</div><div class="tile-value">${esc(value)}</div>${
+    sub ? `<div class="tile-sub muted">${esc(sub)}</div>` : ""}`;
+  return img
+    ? `<div class="tile has-img"><img src="${esc(img)}" alt="" width="56" height="56"><div>${text}</div></div>`
+    : `<div class="tile">${text}</div>`;
 }
 
 const date = (t: number) => new Date(t).toISOString().slice(0, 10);
@@ -156,10 +160,21 @@ const tabFromHash = (): TabId => TABS.find((t) => `#${t.id}` === location.hash)?
 let redraw: (() => void) | null = null;
 window.addEventListener("hashchange", () => redraw?.());
 
-function render(data: PackageData, names: Record<string, string>) {
+function render(data: PackageData, apps: Apps) {
+  const { names, icons } = apps;
   const all = ranges(data);
   const play = playtime(data.games, names);
   const badgeRows = badges(data, names);
+  const span = dataSpan(data);
+  let byName: Map<string, string[]> | null = null; // built on first use; walks Discord's whole app list
+  const iconUrl = (ids: string[] | undefined) => {
+    const icon = ids && gameIcon(ids, icons);
+    return icon ? appIcon(icon.id, icon.hash) : null;
+  };
+  const iconForName = (name: string) => {
+    byName ??= idsByName(names, play.rows);
+    return iconUrl(byName.get(canonName(name)));
+  };
   const who = data.user ? data.user.globalName || data.user.username : "Your package";
   // Shared by the ranged tabs, so switching between Streaming and Voice keeps it.
   let range: Range = LIFETIME;
@@ -175,6 +190,7 @@ function render(data: PackageData, names: Record<string, string>) {
     const v = voice(data.voice, LIFETIME, data);
     const m = messagesFor(LIFETIME);
     const top = (rows: [string, number][]) => rows[0] ? `${rows[0][0]}` : "–";
+    const topGame = s.topApps.find(([name]) => name !== SCREEN_SHARE);
     return `
       <div class="tiles">
         ${tile("Games played", hours(play.total), `${play.rows.length} games`)}
@@ -185,8 +201,10 @@ function render(data: PackageData, names: Record<string, string>) {
         ${tile("Messages sent", count(m.count), `${m.perDay.toFixed(1)} a day`)}
       </div>
       <div class="tiles">
-        ${tile("Most played game", play.rows[0]?.name ?? "–", play.rows[0] ? hours(play.rows[0].seconds) : "")}
-        ${tile("Most streamed", top(s.topApps), s.topApps[0] ? hours(s.topApps[0][1]) : "")}
+        ${tile("Most played game", play.rows[0]?.name ?? "–", play.rows[0] ? hours(play.rows[0].seconds) : "",
+          iconUrl(play.rows[0]?.ids))}
+        ${tile("Most streamed game", topGame?.[0] ?? "–", topGame ? hours(topGame[1]) : "",
+          topGame ? iconForName(topGame[0]) : null)}
         ${tile("Top voice server", top(v.servers), v.servers[0] ? hours(v.servers[0][1]) : "")}
       </div>`;
   };
@@ -342,7 +360,7 @@ function render(data: PackageData, names: Record<string, string>) {
       <div class="results-head">
         <div>
           <h1>${esc(who)}</h1>
-          <p class="muted">Data up to ${esc(date(data.lastEvent || Date.now()))}. Nothing left your browser.</p>
+          <p class="muted">${span.last ? `Data from ${esc(date(span.first))} to ${esc(date(span.last))}.` : ""} Nothing left your browser.</p>
         </div>
         <button class="button ghost small" id="again">Open another package</button>
       </div>
@@ -357,6 +375,9 @@ function render(data: PackageData, names: Record<string, string>) {
       <div class="panel">${panels[tab]()}</div>
     `;
 
+    // A missing icon just disappears (inline onerror would be blocked by the CSP).
+    results.querySelectorAll("img").forEach((img) =>
+      img.addEventListener("error", () => img.remove(), { once: true }));
     results.querySelectorAll<HTMLButtonElement>(".chips .chip").forEach((c) =>
       c.addEventListener("click", () => {
         range = all[Number(c.dataset.i)];

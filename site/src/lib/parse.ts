@@ -392,11 +392,20 @@ async function readMessages(
 // nothing about the user except, for the per-app fallback, the app ids.
 const API = "https://discord.com/api/v9/applications";
 
-export async function resolveAppNames(ids: string[], library: Record<string, string>): Promise<Record<string, string>> {
+export interface Apps {
+  names: Record<string, string>; // app id -> name
+  icons: Record<string, string>; // app id -> icon hash, see appIcon()
+}
+
+export async function resolveApps(ids: string[], library: Record<string, string>): Promise<Apps> {
   const names: Record<string, string> = {};
+  const icons: Record<string, string> = {};
   try {
     const res = await fetch(`${API}/detectable`, { cache: "force-cache" });
-    for (const a of (await res.json()) as { id: string; name: string }[]) names[a.id] = a.name;
+    for (const a of (await res.json()) as { id: string; name: string; icon_hash?: string | null }[]) {
+      names[a.id] = a.name;
+      if (a.icon_hash) icons[a.id] = a.icon_hash;
+    }
   } catch {
     // Offline or blocked: fall through to the library names and lookups.
   }
@@ -408,12 +417,20 @@ export async function resolveAppNames(ids: string[], library: Record<string, str
     for (let id = todo.pop(); id; id = todo.pop()) {
       try {
         const res = await fetch(`${API}/${id}/rpc`);
-        if (res.ok) names[id] = (await res.json()).name;
+        if (!res.ok) continue;
+        const app = await res.json();
+        names[id] = app.name;
+        if (app.icon) icons[id] = app.icon;
       } catch {
         // Leave it unknown.
       }
     }
   };
   await Promise.all([worker(), worker(), worker(), worker()]);
-  return names;
+  return { names, icons };
 }
+
+// Square game icon on Discord's CDN. The browser fetches it straight from
+// Discord, which only learns the app id (the page sends no referrer).
+export const appIcon = (id: string, hash: string, size = 128) =>
+  `https://cdn.discordapp.com/app-icons/${id}/${hash}.png?size=${size}`;
