@@ -46,7 +46,7 @@ def find_event_files(pkg):
 
 
 def _get_json(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "discord-data-stats"})
+    req = urllib.request.Request(url, headers={"User-Agent": "unpacked-stats"})
     with urllib.request.urlopen(req, timeout=30) as r:
         return json.load(r)
 

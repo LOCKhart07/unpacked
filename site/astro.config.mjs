@@ -1,5 +1,11 @@
 import { defineConfig } from "astro/config";
+import sitemap from "@astrojs/sitemap";
 
-// Set `site` to the real domain once there is one; Astro then emits absolute
-// canonical URLs and the sitemap integration can be added.
-export default defineConfig({});
+export default defineConfig({
+  site: "https://unpacked.lockhart.in",
+  trailingSlash: "always",
+  integrations: [sitemap()],
+  // Node binds "localhost" to ::1 only on some Windows setups, which leaves
+  // http://127.0.0.1:4321 dead. Bind IPv4 explicitly; "localhost" still works.
+  server: { host: "127.0.0.1" },
+});

@@ -1,4 +1,4 @@
-# discord-data
+# Unpacked
 
 Stats from your Discord data package: playtime per game, Go Live and watch time, voice, messages, and more. The site processes everything in your browser, so your package never leaves your machine.
 
@@ -19,6 +19,10 @@ npm run dev                                   # http://localhost:4321
 npm run build                                 # static files in site/dist/
 node scripts/check.ts ../data/package.zip     # run the parser on a real package and print the numbers
 ```
+
+## Deploying
+
+The site is hosted on Netlify at <https://unpacked.lockhart.in>. [`netlify.toml`](netlify.toml) builds `site/` on every push to `main` and sets a Content-Security-Policy that only allows requests to the site itself and `discord.com` (for game names), so the browser enforces that packages are never uploaded.
 
 ## Trying the prototype
 
