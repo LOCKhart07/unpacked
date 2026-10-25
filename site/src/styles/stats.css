@@ -113,12 +113,16 @@ section.card { margin-bottom: 20px; }
 
 table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
 td { padding: 5px 4px; vertical-align: middle; }
-td.rank { width: 1.8em; padding-right: 6px; text-align: right; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+table.bars { table-layout: fixed; }
+table.bars .c-rank { width: 2.2em; }
+table.bars .c-num { width: 5.6em; }
+table.bars .c-pct { width: 3.4em; }
+td.rank { padding-right: 8px; text-align: right; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
 table.bars tr.podium td.name { font-weight: 600; }
 table.bars td.name { overflow-wrap: anywhere; }
 td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 table.plain tr + tr td { border-top: 1px solid var(--border); }
-table.bars td.name { position: relative; width: 100%; padding-bottom: 9px; }
+table.bars td.name { position: relative; padding-bottom: 9px; }
 table.bars .bar { position: absolute; left: 4px; bottom: 3px; height: 4px; border-radius: 2px; background: var(--accent); opacity: 0.45; max-width: calc(100% - 8px); }
 table.bars tr.podium .bar { opacity: 0.9; }
 

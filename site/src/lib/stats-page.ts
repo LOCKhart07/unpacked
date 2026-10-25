@@ -110,7 +110,7 @@ function table(
   max = rows[0]?.[1] ?? 0,
   fmt: (n: number) => string = hours,
   icon?: (name: string) => string | null, // image URL per row; rows without one get a blank square
-  firstRank = 1,
+  firstRank: number | null = 1, // null for tables in date order, which aren't a ranking
 ) {
   if (!rows.length) return `<p class="muted">Nothing in this range.</p>`;
   const pic = (name: string) => {
@@ -119,9 +119,10 @@ function table(
     return url ? `<img class="row-icon" src="${esc(url)}" alt="" width="24" height="24" loading="lazy">`
       : `<span class="row-icon"></span>`;
   };
-  return `<table class="bars">${rows
-    .map(([name, s], i) => `<tr${i + firstRank <= 3 ? ` class="podium"` : ""}>
-      <td class="rank muted">${i + firstRank}</td>
+  // Fixed column widths, so tables side by side line up.
+  return `<table class="bars"><colgroup><col class="c-rank"><col><col class="c-num"><col class="c-pct"></colgroup>${rows
+    .map(([name, s], i) => `<tr${firstRank !== null && i + firstRank <= 3 ? ` class="podium"` : ""}>
+      <td class="rank muted">${firstRank === null ? "" : i + firstRank}</td>
       <td class="name">${pic(name)}${esc(name)}<span class="bar" style="width:${max ? (s / max) * 100 : 0}%"></span></td>
       <td class="num">${fmt(s)}</td><td class="num muted">${pct(s, total)}</td></tr>`)
     .join("")}</table>`;
@@ -364,7 +365,7 @@ function render(data: PackageData, apps: Apps) {
             <h3>By kind</h3>
             ${table(v.kinds)}
             <h3>By year</h3>
-            ${table(v.byYear, v.total, Math.max(0, ...v.byYear.map((r) => r[1])))}
+            ${table(v.byYear, v.total, Math.max(0, ...v.byYear.map((r) => r[1])), hours, undefined, null)}
           </div>
         </div>
       </section>`;
