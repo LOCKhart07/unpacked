@@ -1,0 +1,14 @@
+# Personal Discord data packages and anything derived from them. Never commit.
+data/
+*.zip
+package/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
