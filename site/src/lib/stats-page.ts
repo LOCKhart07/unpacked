@@ -34,10 +34,31 @@ function show(which: "drop" | "progress" | "results") {
   results.hidden = which !== "results";
 }
 
-function fail(message: string) {
+const ISSUES = "https://github.com/LOCKhart07/unpacked/issues/new";
+let lastPhase = "";
+let fileSize = 0;
+
+// A GitHub issue link with the bug report form filled in. Only the error, the
+// step and the browser go in: nothing from the package itself.
+function reportUrl(error: string) {
+  const q = new URLSearchParams({
+    template: "bug_report.yml",
+    title: `Couldn't read package: ${error.slice(0, 80)}`,
+    error,
+    step: lastPhase,
+    package: `${(fileSize / 1e6).toFixed(fileSize < 1e7 ? 1 : 0)} MB`,
+    browser: navigator.userAgent,
+  });
+  return `${ISSUES}?${q}`;
+}
+
+// `error` set means a bug worth reporting, so the box gets a report link.
+function fail(message: string, error?: string) {
   worker?.terminate();
   worker = null;
-  errorBox.textContent = message;
+  errorBox.innerHTML = `${esc(message)}${error === undefined ? "" : `
+    <br><a href="${esc(reportUrl(error))}" target="_blank" rel="noopener">Report this bug on GitHub</a>
+    <span class="muted small">(opens a form with the error and your browser filled in; nothing is sent until you submit it)</span>`}`;
   errorBox.hidden = false;
   show("drop");
 }
@@ -49,6 +70,8 @@ function start(file: File) {
     return;
   }
   show("progress");
+  lastPhase = "Starting";
+  fileSize = file.size;
   phase.textContent = "Starting";
   bar.style.width = "0%";
   percent.textContent = "";
@@ -56,20 +79,20 @@ function start(file: File) {
   worker.onmessage = (e: MessageEvent<WorkerMessage>) => {
     const m = e.data;
     if (m.type === "progress") {
-      phase.textContent = m.phase;
+      phase.textContent = lastPhase = m.phase;
       const p = m.total ? Math.round((m.done / m.total) * 100) : null;
       bar.style.width = p === null ? "100%" : `${p}%`;
       bar.classList.toggle("indeterminate", p === null);
       percent.textContent = p === null ? "" : `${p}%`;
     } else if (m.type === "error") {
-      fail(`Couldn't read this package: ${m.message}`);
+      fail(`Couldn't read this package: ${m.message}`, m.message);
     } else {
       worker?.terminate();
       worker = null;
       render(m.data, m.apps);
     }
   };
-  worker.onerror = (e) => fail(`Something went wrong while reading the package: ${e.message}`);
+  worker.onerror = (e) => fail(`Something went wrong while reading the package: ${e.message}`, e.message);
   worker.postMessage(file);
 }
 

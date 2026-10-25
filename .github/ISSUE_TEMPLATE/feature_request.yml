@@ -1,0 +1,16 @@
+name: Idea or feedback
+description: A stat you'd like to see, or anything else about the site.
+labels: [feedback]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like?
+      description: A stat, a change to how something looks, or general feedback.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Anything else?
+      description: Other tools that do it, or where in the package the data is, if you know.

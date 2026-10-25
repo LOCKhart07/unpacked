@@ -1,0 +1,36 @@
+name: Bug report
+description: Something went wrong reading your package, or a number looks wrong.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. **Don't attach your data package or paste messages from it**: it's personal, and this issue is public.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what did you see instead?
+    validations:
+      required: true
+  - type: textarea
+    id: error
+    attributes:
+      label: Error message
+      description: Filled in for you if you came from the error on the stats page.
+      render: text
+  - type: input
+    id: step
+    attributes:
+      label: Step it failed at
+      description: The progress text shown when it failed, e.g. "Reading activity events".
+  - type: input
+    id: package
+    attributes:
+      label: Package size and when you requested it
+      placeholder: e.g. 320 MB, requested October 2026
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and OS
+      placeholder: e.g. Chrome 140 on Windows 11
