@@ -5,7 +5,8 @@ Not in priority order, and none of it has to land at once. The full feature list
 ## UI
 
 - [ ] **Redesign the stats page.** It works but looks plain. Make it look good enough to share.
-- [ ] **Range selector is confusing.** The Lifetime / Last 30 days / year chips at the top only change streaming and voice. Playtime is lifetime-only (the package has one total per game) and badges ignore the range. Either move the selector into the sections it affects, or clearly mark the sections that are lifetime-only.
+- [ ] **Split the stats page into tabs:** Overview · Games · Streaming · Voice · Messages (once it exists) · Account / Badges. Each tab is one topic, so the page stops being a long scroll, and new stats get their own tab instead of piling up. Keep the tab in the URL (`#voice`) so it survives a reload and can be linked.
+- [ ] **Range selector is confusing.** The Lifetime / Last 30 days / year chips at the top only change streaming and voice. Playtime is lifetime-only (the package has one total per game) and badges ignore the range. With tabs, show the range chips only on the tabs that support them (Streaming, Voice, Messages) and label the others "Lifetime".
 - [ ] **Highlight the important numbers.** Bigger headline stats, comparisons people get at a glance ("that's 414 days in voice"), and a top-of-page summary.
 - [ ] **Game images.** Show each game's icon next to its name. The detectable apps list already has icon hashes (`cdn.discordapp.com/app-icons/<id>/<icon>.png`). `img-src` in the CSP in `netlify.toml` needs `https://cdn.discordapp.com`.
 
