@@ -4,11 +4,11 @@ import Base from "../layouts/Base.astro";
 const faq = [
   {
     q: "What is Unpacked?",
-    a: "A free, open-source Discord data package viewer and analyzer. You open the package.zip Discord sends you, and it turns it into charts and stats: playtime per game, Go Live and voice time, messages, time with Discord open, your account and what you've spent. It's like Discord Wrapped, for your whole account history.",
+    a: "A free, open-source Discord data package viewer, analyzer and visualizer. You open the package.zip Discord sends you, and it turns it into charts and stats: playtime per game, Go Live and voice time, messages, time with Discord open, your account and what you've spent. It handles packages exported in 2026, in any language, and big ones too. It's like Discord Wrapped, for your whole account history.",
   },
   {
     q: "Is my Discord data uploaded anywhere?",
-    a: "No. The page reads your package.zip inside your browser tab and never sends it anywhere. The only network requests are to Discord's public list of games and its game icons, to show your games' names and pictures.",
+    a: "No. Your package never leaves your computer: the page reads your package.zip inside your browser tab and never sends it anywhere, unlike tools that ask for your package's download link so their server can fetch it. The only network requests are to Discord's public list of games and its game and emoji pictures. Results stay in your browser so you don't have to open the ZIP again, until you click Forget. The code is open source, so you can check.",
   },
   {
     q: "How do I get my Discord data package?",
@@ -67,64 +67,46 @@ const jsonLd = {
     <section class="hero">
       <p class="kicker">Discord data package viewer and analyzer</p>
       <h1>Every hour you've spent on Discord, from your own data.</h1>
-      <p class="lead muted">
-        Playtime per game, Go Live and watch time, how much you talk in voice, and how your lifetime totals compare with
-        your profile badges. Read straight from your Discord data package, in your browser.
-      </p>
+      <p class="lead muted">Open the package.zip Discord sent you and see your whole history as charts.</p>
       <div class="hero-actions">
-        <a class="button" href="/stats/">Open your package</a>
-        <a class="button ghost" href="/request-your-discord-data/">How to get it</a>
-        <a class="button ghost" href="/stats/?demo">Try with sample data</a>
+        <a class="button big" href="/stats/">Open your package</a>
+        <a class="button ghost big" href="/stats/?demo">Try with sample data</a>
       </div>
+      <p class="promise muted">Read in your browser and never uploaded · Free · No account</p>
     </section>
 
-    <section class="grid features">
-      <div class="card">
-        <h2>Playtime per game</h2>
-        <p class="muted">Lifetime hours for every game Discord has seen you play, with duplicate game entries merged.</p>
-      </div>
-      <div class="card">
-        <h2>Go Live and watch time</h2>
-        <p class="muted">Hours streamed, what you streamed most, your longest stream, and time spent watching friends' streams and cameras.</p>
-      </div>
-      <div class="card">
-        <h2>Voice: talking vs listening</h2>
-        <p class="muted">Total time in voice, how much of it you were talking, and your top servers and channels.</p>
-      </div>
-      <div class="card">
-        <h2>Messages, words and emoji</h2>
-        <p class="muted">How much you've sent, to whom and where, when you're most active, your favourite words and emoji.</p>
-      </div>
-      <div class="card">
-        <h2>Time on Discord</h2>
-        <p class="muted">Hours with Discord open, sessions per device, and how often you open the app, react, join voice and more.</p>
-      </div>
-      <div class="card">
-        <h2>Account and spending</h2>
-        <p class="muted">Your profile, badges, friends, connected accounts, signed-in devices, and everything you've paid for.</p>
-      </div>
-      <div class="card">
-        <h2>Any time range, shareable</h2>
-        <p class="muted">Lifetime, the last 30 days, 6 or 12 months, or a single year, in your time zone. Share any of it as an image.</p>
-      </div>
+    <section class="get-it" id="get-it">
+      <h2>Don't have your package yet?</h2>
+      <ol class="steps">
+        <li>
+          <strong>Request it</strong>
+          <span class="muted">In Discord, open User Settings → Data &amp; Privacy → Request Data. Tick every section.</span>
+        </li>
+        <li>
+          <strong>Wait for the email</strong>
+          <span class="muted">Discord emails you a download link, which can take up to 30 days.</span>
+        </li>
+        <li>
+          <strong>Open it here</strong>
+          <span class="muted">Choose the package.zip. No need to unzip it.</span>
+        </li>
+      </ol>
+      <p><a href="/request-your-discord-data/">Full step-by-step guide, for desktop and mobile</a></p>
     </section>
 
-    <section class="card private">
-      <h2>Your package never leaves your computer</h2>
+    <section class="features">
+      <h2>What you'll see</h2>
+      <ul>
+        <li><strong>Playtime per game</strong> <span class="muted">for every game Discord has seen you play</span></li>
+        <li><strong>Go Live and watch time</strong> <span class="muted">streamed, watched, your longest stream</span></li>
+        <li><strong>Voice</strong> <span class="muted">talking vs listening, top servers and channels</span></li>
+        <li><strong>Messages</strong> <span class="muted">top DMs and servers, favourite words and emoji</span></li>
+        <li><strong>Time on Discord</strong> <span class="muted">hours with it open, per device</span></li>
+        <li><strong>Account and spending</strong> <span class="muted">badges, connections, what you've paid for</span></li>
+        <li><strong>Any time range</strong> <span class="muted">lifetime, a year or the last 30 days, shareable as an image</span></li>
+      </ul>
       <p class="muted">
-        Some tools ask you to paste your package's download link so their server can fetch it. This one reads the ZIP
-        in your browser tab. The results stay in your browser so you don't have to open the ZIP again, until you click
-        Forget. The code is open source, so you can check.
-      </p>
-    </section>
-
-    <section class="prose">
-      <h2>See your Discord data, not just download it</h2>
-      <p class="muted">
-        Discord's data package is a ZIP of JSON files and multi-gigabyte event logs, not something you can read. Unpacked
-        is a Discord data visualizer for it: it finds the parts that matter, works out the totals, and draws them as
-        charts you can filter by year. It handles packages exported in 2026, in any language, and big ones too.
-        Coming from another tool? Here's <a href="/discord-data-package-explorer-alternatives/">how the Discord data
+        Coming from another tool? See <a href="/discord-data-package-explorer-alternatives/">how the Discord data
         package viewers compare</a>.
       </p>
     </section>
@@ -143,13 +125,21 @@ const jsonLd = {
 </Base>
 
 <style>
-  .hero { padding-block: 40px 56px; max-width: 760px; }
+  .hero { padding-block: 40px 48px; max-width: 760px; }
   .lead { font-size: 1.2rem; }
-  .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 24px; }
-  .features h2 { font-size: 1.15rem; }
-  .features p { margin: 0; }
-  .private { margin-block: 32px; }
-  .faq { margin-top: 40px; }
+  .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 28px; }
+  .button.big { font-size: 1.1rem; padding: 0.8em 1.6em; }
+  .promise { margin: 14px 0 0; font-size: 0.9rem; }
+  section > h2 { font-size: 1.3rem; }
+  .get-it, .features { border-top: 1px solid var(--border); padding-block: 32px; }
+  .steps { list-style: none; counter-reset: step; padding: 0; margin: 0 0 12px; display: grid; gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  .steps li { counter-increment: step; display: flex; flex-direction: column; gap: 4px; }
+  .steps li::before { content: counter(step); display: grid; place-items: center; width: 28px; height: 28px; margin-bottom: 6px;
+    border-radius: 50%; background: var(--surface-2); color: var(--accent-2); font-weight: 700; font-size: 0.9rem; }
+  .features ul { list-style: none; padding: 0; margin: 0 0 16px; display: grid; gap: 10px 32px;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .faq { border-top: 1px solid var(--border); padding-top: 32px; }
   .faq details { border-bottom: 1px solid var(--border); padding-block: 12px; }
   .faq summary { cursor: pointer; font-weight: 600; }
   .faq details p { margin: 8px 0 0; }
