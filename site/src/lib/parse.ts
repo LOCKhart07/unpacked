@@ -46,13 +46,15 @@ export interface SessionRec {
   os: string; // "Windows", "Android", ...
 }
 
-// One game session from overlay_usage_stats, which Discord only logs from
-// late 2023 on, and not for every session.
+// One game session. Two sources that disagree on some sessions, so both are
+// kept: application_closed ("app", from 2020 on, only games Discord detected)
+// and overlay_usage_stats ("overlay", from late 2023 on, not every session).
 export interface GameSessionRec {
   t: number; // end
   sec: number;
   id: string | null;
-  name: string;
+  name: string; // empty for "app": named from the app list
+  src: "app" | "overlay";
 }
 
 // Events that are only counted, each kept as a list of times so ranges work.
@@ -145,7 +147,7 @@ const STREAM_ROLES: Record<string, number> = {
   "default/receiver": 3,
 };
 
-const NEEDLES = ["video_stream_ended", "voice_disconnect", "leave_voice_channel", "session_start", "session_end", "overlay_usage_stats", ...COUNTED].map(
+const NEEDLES = ["video_stream_ended", "voice_disconnect", "leave_voice_channel", "session_start", "session_end", "overlay_usage_stats", "application_closed", ...COUNTED].map(
   (t) => `"event_type":"${t}"`,
 );
 
@@ -418,7 +420,13 @@ function extractEvent(line: string): Ev | null {
     // Launchers (Steam, Battle.net) run alongside the game; game_duration is ms.
     const sec = num(d.game_duration) / 1000;
     return { ...head, k: "game", rec: d.game_is_launcher === true || !sec ? null : {
-      t, sec, id: d.game_id ? String(d.game_id) : null, name: String(d.game_name ?? ""),
+      t, sec, id: d.game_id ? String(d.game_id) : null, name: String(d.game_name ?? ""), src: "overlay",
+    } };
+  }
+  if (type === "application_closed") {
+    const sec = num(d.activity_duration_s);
+    return { ...head, k: "game", rec: !sec || !d.application_id ? null : {
+      t, sec, id: String(d.application_id), name: "", src: "app",
     } };
   }
   if (type === "video_stream_ended") {

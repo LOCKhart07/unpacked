@@ -1,7 +1,7 @@
 // The /stats/ page: file input, worker, progress, and rendering the results.
 // Plain DOM; every value from the package goes through esc().
 
-import { appIcon, emojiImage, serverIcon, type Apps, type PackageData, type Payment } from "./parse.ts";
+import { appIcon, emojiImage, serverIcon, type Apps, type GameSessionRec, type PackageData, type Payment } from "./parse.ts";
 import {
   BADGE_START, LIFETIME, SCREEN_SHARE, STREAM_ROLE_LABELS, badges, canonName, customEmoji, dataSpan, gameIcon, hours, idsByName, messages, pct, playtime,
   counts, localDate, ranges, sessions, setTimeZone, streamNamer, streams, timeZone, voice,
@@ -494,6 +494,8 @@ function render(data: PackageData, apps: Apps) {
   const who = data.user ?data.user.globalName || data.user.username : "Your package";
   // Shared by the ranged tabs, so switching between Streaming and Voice keeps it.
   let range: Range = LIFETIME;
+  // Which source the longest gaming sessions come from.
+  let gameSrc: GameSessionRec["src"] = data.gameSessions.some((r) => r.src === "app") ? "app" : "overlay";
   // Word and emoji counting goes over every message, so keep results per range.
   const messageCache = new Map<string, MessageStats>();
   const messagesFor = (r: Range) => {
@@ -604,18 +606,26 @@ function render(data: PackageData, apps: Apps) {
     </section>
     ${longestGames()}`;
 
-  // Single sessions only come from overlay_usage_stats, which is patchy: say so.
+  // Single sessions come from two patchy sources that disagree: say so, and
+  // let the viewer switch between them.
   const longestGames = () => {
-    const ss = data.gameSessions;
-    if (!ss.length) return "";
+    const has = (src: string) => data.gameSessions.some((r) => r.src === src);
+    if (!has("app") && !has("overlay")) return "";
+    const ss = data.gameSessions.filter((r) => r.src === gameSrc);
     const first = ss.reduce((a, r) => Math.min(a, r.t), Infinity);
     const top = [...ss].sort((a, b) => b.sec - a.sec).slice(0, 10);
+    const chip = (src: string, label: string) =>
+      `<button class="chip" data-src="${src}" aria-pressed="${src === gameSrc}">${label}</button>`;
     return `
     <section class="card">
-      <h2>Longest gaming sessions</h2>
-      <div class="notice">Only partial: Discord only logs single sessions from ${esc(date(first))} on, and only some
-        of them (the ones its game overlay tracked), so older and missed sessions aren't here. Your real longest
-        session may be longer.</div>
+      <div class="card-head"><h2>Longest gaming sessions</h2><span class="pill beta" tabindex="0"
+        data-tip="Discord logs game sessions in two places, and they disagree on some: one can say 8 h where the other says under 1 h. Nothing in the package says which is right, so compare both.">Beta</span></div>
+      ${has("app") && has("overlay") ? `<div class="chips" role="group" aria-label="Source">${
+        chip("app", "Game log")}${chip("overlay", "Overlay log")}</div>` : ""}
+      <div class="notice">${gameSrc === "app"
+        ? `From Discord's game log, ${esc(date(first))} on. Games Discord didn't detect as running aren't in it, even if you streamed them.`
+        : `From the game overlay's log, which starts ${esc(date(first))} and skips sessions the overlay didn't track.`}
+        Your real longest session may be longer.</div>
       <table class="plain">${top.map((r) => {
         const name = (r.id && names[r.id]) || r.name || "Unknown game";
         return `<tr><td>${esc(date(r.t))}</td><td>${esc(name)}</td><td class="num">${esc(hours(r.sec))}</td></tr>`;
@@ -925,7 +935,12 @@ function render(data: PackageData, apps: Apps) {
         else if (img.classList.contains("row-icon")) img.replaceWith(Object.assign(document.createElement("span"), { className: "row-icon" }));
         else img.remove();
       }, { once: true }));
-    results.querySelectorAll<HTMLButtonElement>(".chips .chip").forEach((c) =>
+    results.querySelectorAll<HTMLButtonElement>(".chips .chip[data-src]").forEach((c) =>
+      c.addEventListener("click", () => {
+        gameSrc = c.dataset.src as GameSessionRec["src"];
+        draw();
+      }));
+    results.querySelectorAll<HTMLButtonElement>(".chips .chip[data-i]").forEach((c) =>
       c.addEventListener("click", () => {
         range = all[Number(c.dataset.i)];
         draw();

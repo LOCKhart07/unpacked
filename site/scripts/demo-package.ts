@@ -249,6 +249,13 @@ for (let day = END - 730 * DAY; day < END; day += DAY) {
   push({ event_type: "overlay_usage_stats", timestamp: iso(day + (13 + rand3() * 6) * 3_600_000),
     game_id: g[0], game_name: g[1], game_is_launcher: false, game_duration: ms });
 }
+// The game log (application_closed) goes back further.
+for (let day = START; day < END; day += DAY) {
+  if (rand3() > 0.4 * activity(day)) continue;
+  const g = GAMES[Math.min(GAMES.length - 1, Math.floor(rand3() ** 2 * GAMES.length))];
+  push({ event_type: "application_closed", timestamp: iso(day + (13 + rand3() * 6) * 3_600_000),
+    application_id: g[0], activity_duration_s: Math.round((0.3 + rand3() ** 2 * 8) * 3600) });
+}
 
 // ---- Messages ----------------------------------------------------------------
 
