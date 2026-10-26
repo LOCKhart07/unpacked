@@ -17,7 +17,7 @@ Not in priority order, and none of it has to land at once. The full feature list
 - [x] **Word chart:** favourite words, leaving out stopwords, links, code and bot commands.
 - [x] **Emoji use:** top emojis, including custom server emojis.
 - [ ] **Stopwords for other languages.** Only English filler words are left out, so Hinglish chat gives "nai", "hai", "kai" as top words. Add lists for common languages (Hinglish, Spanish, French, German, Portuguese...).
-- [ ] **Show custom emoji images** (`cdn.discordapp.com/emojis/<id>`); the id is in the message text. The CSP already allows `cdn.discordapp.com`.
+- [x] **Show custom emoji images** (`cdn.discordapp.com/emojis/<id>.webp`, lazy and 64 px); a deleted emoji falls back to its `:name:`.
 - [ ] **Everything else from the reference sites** (DDPE, Discord Package, Dumpus). See the checklist in [FEATURES.md](FEATURES.md) for what's left. (Done: Account tab; Activity tab with time on Discord and event counts.)
 
 ## SEO

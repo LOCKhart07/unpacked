@@ -320,7 +320,13 @@ const CODE_RE = /```[\s\S]*?```|`[^`\n]*`/g;
 // "$pokesearch x", "!play", "--tts hi", "p!hint", "f!rank": commands typed for bots.
 const COMMAND_RE = /^\s*(?:[!$%&+.,;:>?/\\~-]{1,2}|[a-z]{1,2}[!.;$])[a-z]/i;
 const MENTION_RE = /<(?:@[!&]?|#)\d+>/g;
-const CUSTOM_EMOJI_RE = /<a?:(\w+):\d+>/g;
+const CUSTOM_EMOJI_RE = /<a?:\w+:\d+>/g;
+
+// Custom emojis are counted by their raw "<a:name:id>" form, so the card can show the image.
+export function customEmoji(key: string) {
+  const m = /^<(a?):(\w+):(\d+)>$/.exec(key);
+  return m && { animated: m[1] === "a", name: m[2], id: m[3] };
+}
 const WORD_RE = /\p{L}[\p{L}\p{N}'’]*/gu;
 const PICTO_RE = /\p{Extended_Pictographic}/u;
 const graphemes = new Intl.Segmenter("en", { granularity: "grapheme" });
@@ -370,7 +376,7 @@ export function messages(data: Pick<PackageData, "messages" | "channels">, range
 
     let text = m.text;
     if (text.includes("<")) {
-      for (const e of text.matchAll(CUSTOM_EMOJI_RE)) add(emojis, `:${e[1]}:`, 1);
+      for (const e of text.matchAll(CUSTOM_EMOJI_RE)) add(emojis, e[0], 1);
       text = text.replace(CUSTOM_EMOJI_RE, " ").replace(MENTION_RE, " ");
     }
     if (text.includes(":")) text = text.replace(URL_RE, " ");

@@ -653,5 +653,8 @@ async function rpcLookup(id: string): Promise<{ name: string; icon?: string | nu
 
 // Square game icon on Discord's CDN. The browser fetches it straight from
 // Discord, which only learns the app id (the page sends no referrer).
+export const emojiImage = (id: string, animated: boolean, size = 64) =>
+  `https://cdn.discordapp.com/emojis/${id}.webp?size=${size}${animated ? "&animated=true" : ""}`;
+
 export const appIcon = (id: string, hash: string, size = 128) =>
   `https://cdn.discordapp.com/app-icons/${id}/${hash}.png?size=${size}`;

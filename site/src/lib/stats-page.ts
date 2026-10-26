@@ -1,9 +1,9 @@
 // The /stats/ page: file input, worker, progress, and rendering the results.
 // Plain DOM; every value from the package goes through esc().
 
-import { appIcon, type Apps, type PackageData, type Payment } from "./parse.ts";
+import { appIcon, emojiImage, type Apps, type PackageData, type Payment } from "./parse.ts";
 import {
-  BADGE_START, LIFETIME, SCREEN_SHARE, STREAM_ROLE_LABELS, badges, canonName, dataSpan, gameIcon, hours, idsByName, messages, pct, playtime,
+  BADGE_START, LIFETIME, SCREEN_SHARE, STREAM_ROLE_LABELS, badges, canonName, customEmoji, dataSpan, gameIcon, hours, idsByName, messages, pct, playtime,
   counts, localDate, ranges, sessions, setTimeZone, streamNamer, streams, timeZone, voice,
   type MessageStats, type Range, type Series,
 } from "./stats.ts";
@@ -165,6 +165,14 @@ cancel.addEventListener("click", () => {
 const DAY = 86_400_000;
 const count = (n: number) => n.toLocaleString("en-US");
 const strong = (s: string) => `<strong>${esc(s)}</strong>`;
+
+// A custom server emoji as its image (lazy, fixed size, falls back to ":name:"), anything else as text.
+function emoji(e: string) {
+  const c = customEmoji(e);
+  if (!c) return `<span class="glyph">${esc(e)}</span>`;
+  return `<img class="emoji-img" src="${emojiImage(c.id, c.animated)}" alt=":${esc(c.name)}:" title=":${esc(c.name)}:"
+    width="32" height="32" loading="lazy" decoding="async">`;
+}
 
 // "414 days" for big totals, so a number of hours means something.
 function nonstop(sec: number) {
@@ -531,7 +539,7 @@ function render(data: PackageData, apps: Apps) {
       play.rows[0] && `${strong(play.rows[0].name)} is ${strong(pct(play.rows[0].seconds, play.total))} of all your playtime.`,
       busiest >= 0 && `You send the most messages around ${strong(`${String(busiest).padStart(2, "0")}:00`)}.`,
       m.words[0] && `Your favourite word is ${strong(`“${m.words[0][0]}”`)}, used ${strong(count(m.words[0][1]))} times.`,
-      m.emojis[0] && `Your go-to emoji is ${strong(m.emojis[0][0])}, used ${strong(count(m.emojis[0][1]))} times.`,
+      m.emojis[0] && `Your go-to emoji is <strong class="emoji-inline">${emoji(m.emojis[0][0])}</strong>, used ${strong(count(m.emojis[0][1]))} times.`,
     ].filter(Boolean);
     return `
       <div class="leads">
@@ -688,7 +696,7 @@ function render(data: PackageData, apps: Apps) {
       <section class="card">
         <h2>Emoji</h2>
         ${m.emojis.length ? `<div class="emoji-grid">${m.emojis.map(([e, n]) =>
-          `<div class="emoji"><span class="${e.startsWith(":") ? "custom" : "glyph"}">${esc(e)}</span><span class="muted">${count(n)}</span></div>`).join("")}</div>`
+          `<div class="emoji">${emoji(e)}<span class="muted">${count(n)}</span></div>`).join("")}</div>`
           : `<p class="muted">No emoji in this range.</p>`}
       </section>
       ${m.first ? `<section class="card">
@@ -860,7 +868,9 @@ function render(data: PackageData, apps: Apps) {
     results.querySelectorAll("img").forEach((img) =>
       img.addEventListener("error", () => {
         // Keep table rows aligned with the same blank square rows without an icon get.
-        if (img.classList.contains("row-icon")) img.replaceWith(Object.assign(document.createElement("span"), { className: "row-icon" }));
+        // A deleted custom emoji shows its name instead.
+        if (img.classList.contains("emoji-img")) img.replaceWith(Object.assign(document.createElement("span"), { className: "custom", textContent: img.alt }));
+        else if (img.classList.contains("row-icon")) img.replaceWith(Object.assign(document.createElement("span"), { className: "row-icon" }));
         else img.remove();
       }, { once: true }));
     results.querySelectorAll<HTMLButtonElement>(".chips .chip").forEach((c) =>
