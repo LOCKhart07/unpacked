@@ -383,7 +383,7 @@ export type Ev = { id: string; t: number; zone: string | null } & (
   | { k: "start" | "end"; session: string | null; os: string }
   | { k: "count"; type: Counted }
   | { k: "stream"; rec: StreamRec | null }
-  | { k: "voice"; rec: VoiceRec | null }
+  | { k: "voice"; rec: VoiceRec | null; rtc: string | null }
 );
 
 function extractEvent(line: string): Ev | null {
@@ -416,7 +416,7 @@ function extractEvent(line: string): Ev | null {
   const lv = type === "leave_voice_channel";
   // voice_disconnect also fires for the separate connection Go Live opens
   // (context=stream); counting it would add stream time to voice time.
-  return { ...head, k: "voice", rec: !lv && d.context === "stream" ? null : {
+  return { ...head, k: "voice", rtc: d.rtc_connection_id ? String(d.rtc_connection_id) : null, rec: !lv && d.context === "stream" ? null : {
     t,
     src: lv ? "lv" : "vd",
     sec: num(d.duration) / 1000, // milliseconds in both event types
@@ -483,6 +483,8 @@ class EventFolder {
   // Session id -> earliest start / latest end, paired once everything is added.
   private starts = new Map<string, { t: number; os: string }>();
   private ends = new Map<string, number>();
+  // rtc_connection_id -> that connection's voice records, checked in finish().
+  private calls = new Map<string, VoiceRec[]>();
   private data: PackageData;
   constructor(data: PackageData) {
     this.data = data;
@@ -506,6 +508,11 @@ class EventFolder {
       if (ev.rec) data.streams.push(ev.rec);
     } else if (ev.k === "voice" && ev.rec) {
       data.voice.push(ev.rec);
+      if (ev.rtc) {
+        const list = this.calls.get(ev.rtc);
+        if (list) list.push(ev.rec);
+        else this.calls.set(ev.rtc, [ev.rec]);
+      }
     }
   }
 
@@ -519,6 +526,16 @@ class EventFolder {
       if (end !== undefined && end >= st.t) data.sessions.push({ t: st.t, sec: (end - st.t) / 1000, os: st.os });
     }
     data.sessions.sort((a, b) => a.t - b.t);
+    // On some abnormal disconnects (Force Close, websocket errors; mostly
+    // 2020-22) `duration` runs on for hours or days past the call, while
+    // duration_connected stays right: 84 h against 39 min connected. Cut
+    // those connections, and their leave_voice_channel, to the connected time.
+    for (const recs of this.calls.values()) {
+      const vd = recs.find((r) => r.src === "vd" && r.conn != null && r.sec > r.conn * 1.5 + 600);
+      if (!vd) continue;
+      const conn = vd.conn!;
+      for (const r of recs) r.sec = Math.min(r.sec, conn);
+    }
   }
 }
 

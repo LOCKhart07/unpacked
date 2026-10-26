@@ -256,8 +256,8 @@ export function voice(recs: VoiceRec[], range: Range, data: Pick<PackageData, "s
     if (r.guild) add(servers, r.guild, r.sec);
     if (r.channel) add(channels, `${r.guild ?? ""}/${r.channel}`, r.sec);
     if (!longest || r.sec > longest.sec) longest = r;
-    // Talk / listen are measured over connected time, which falls short of
-    // `duration` on some long 2021-22 sessions: report them as a share of it.
+    // Talk / listen are measured over connected time, which can fall a bit
+    // short of `duration`: report them as a share of it.
     if (r.conn) {
       connected += r.conn;
       speaking += r.speak;
