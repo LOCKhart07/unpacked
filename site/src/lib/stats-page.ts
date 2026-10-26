@@ -178,10 +178,10 @@ function emoji(e: string) {
     width="32" height="32" loading="lazy" decoding="async">`;
 }
 
-// "414 days" for big totals, so a number of hours means something.
+// "414 full days" for big totals, so a number of hours means something.
 function nonstop(sec: number) {
   const d = sec / 86_400;
-  return d >= 2 ? `${count(Math.round(d))} days` : `${count(Math.round(sec / 3600))} hours`;
+  return d >= 2 ? `${count(Math.round(d))} full days` : `${count(Math.round(sec / 3600))} full hours`;
 }
 
 function table(
@@ -568,9 +568,9 @@ function render(data: PackageData, apps: Apps) {
     ].filter(Boolean);
     return `
       <div class="leads">
-        ${lead("In voice", hours(v.total), [`${strong(nonstop(v.total))} nonstop`, `${esc(perDay(v.total, LIFETIME))}${since(LIFETIME)}`])}
-        ${lead("Playing games", hours(play.total), [`${strong(nonstop(play.total))} nonstop`, `across ${count(play.rows.length)} games`])}
-        ${lead("Streaming on Go Live", hours(s.seconds[0]), [`${strong(nonstop(s.seconds[0]))} nonstop`, `${count(s.sessions[0])} streams`])}
+        ${lead("In voice", hours(v.total), [`that's ${strong(nonstop(v.total))}`, `${esc(perDay(v.total, LIFETIME))}${since(LIFETIME)}`])}
+        ${lead("Playing games", hours(play.total), [`that's ${strong(nonstop(play.total))}`, `across ${count(play.rows.length)} games`])}
+        ${lead("Streaming on Go Live", hours(s.seconds[0]), [`that's ${strong(nonstop(s.seconds[0]))}`, `${count(s.sessions[0])} streams`])}
         ${lead("Messages sent", count(m.count), [`${strong(m.perDay.toFixed(1))} a day`, `${count(m.chars)} characters typed`])}
       </div>
       <div class="tiles">
@@ -591,7 +591,7 @@ function render(data: PackageData, apps: Apps) {
       from Discord, and the lookup failed or was blocked, which ad and tracker blockers sometimes do. Reloading the
       page and opening the package again usually fixes it.</div>` : ""}
     <div class="leads">
-      ${lead("Playing games", hours(play.total), [`${strong(nonstop(play.total))} nonstop`])}
+      ${lead("Playing games", hours(play.total), [`that's ${strong(nonstop(play.total))}`])}
       ${lead("Games played", count(play.rows.length), [
         play.rows[0] ? `top game: ${strong(play.rows[0].name)}` : "",
         play.rows.length >= 3 ? `top 3 are ${strong(pct(play.rows.slice(0, 3).reduce((t, r) => t + r.seconds, 0), play.total))} of it` : "",
@@ -643,7 +643,7 @@ function render(data: PackageData, apps: Apps) {
     return `
       <div class="tiles">
         ${lead("In voice", hours(v.total), [
-          `${strong(nonstop(v.total))} nonstop`,
+          `that's ${strong(nonstop(v.total))}`,
           `${esc(perDay(v.total, range))}${since(range)}, over ${count(v.connections)} connections`,
         ])}
         ${tile("Talking", hours(v.speaking), `${pct(v.speaking, v.connected)} of connected time`)}
@@ -825,7 +825,7 @@ function render(data: PackageData, apps: Apps) {
     return `
       <div class="tiles">
         ${lead("Discord open", hours(a.total), [
-          `${strong(nonstop(a.total))} nonstop`,
+          `that's ${strong(nonstop(a.total))}`,
           `${esc(perDay(a.total, range))}${since(range)}`,
         ])}
         ${tile("Sessions", count(a.count), a.count ? `${esc(minutes(deviceTotal / a.count))} on average` : "")}
