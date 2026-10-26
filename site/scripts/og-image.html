@@ -1,0 +1,87 @@
+<!doctype html>
+<!--
+  Source of public/og.png, the preview card shown when a link is shared.
+  The numbers are made up. To re-render it (from site/):
+
+    google-chrome --headless=new --hide-scrollbars --force-color-profile=srgb \
+      --window-size=1200,630 --screenshot=public/og.png scripts/og-image.html
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<style>
+  :root {
+    --bg: #0f1014;
+    --surface: #181a20;
+    --border: #2a2e38;
+    --text: #e8e9ee;
+    --muted: #9a9fae;
+    --accent: #7c6cf0;
+    --accent-2: #a597ff;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; }
+  body {
+    background:
+      radial-gradient(800px 500px at 100% 0%, rgba(124, 108, 240, 0.22), transparent 70%),
+      var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 64px 72px;
+    display: grid;
+    grid-template-columns: 1fr 400px;
+    gap: 56px;
+    align-items: center;
+  }
+  .brand { display: flex; align-items: center; gap: 14px; font-size: 30px; font-weight: 700; margin-bottom: 40px; }
+  .brand svg { width: 48px; height: 48px; }
+  h1 { font-size: 60px; line-height: 1.08; letter-spacing: -0.025em; margin-bottom: 28px; }
+  h1 em { font-style: normal; color: var(--accent-2); }
+  .sub { font-size: 25px; line-height: 1.4; color: var(--muted); }
+  .url { margin-top: 36px; font-size: 22px; color: var(--accent-2); font-weight: 600; }
+
+  .stats { display: grid; gap: 14px; }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 20px 24px;
+  }
+  .stat .label { font-size: 17px; color: var(--muted); margin-bottom: 2px; }
+  .stat .value { font-size: 40px; font-weight: 700; letter-spacing: -0.02em; }
+  .stat .value small { font-size: 22px; color: var(--muted); font-weight: 600; margin-left: 4px; }
+  .bars { display: flex; align-items: flex-end; gap: 7px; height: 64px; margin-top: 12px; }
+  .bars span { flex: 1; border-radius: 4px 4px 0 0; background: var(--accent); opacity: 0.9; }
+  .bars span:nth-child(odd) { opacity: 0.65; }
+</style>
+</head>
+<body>
+  <div>
+    <div class="brand">
+      <svg viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#7c6cf0"/><rect x="7" y="17" width="4" height="8" rx="1" fill="#fff"/><rect x="14" y="11" width="4" height="14" rx="1" fill="#fff"/><rect x="21" y="7" width="4" height="18" rx="1" fill="#fff"/></svg>
+      Unpacked
+    </div>
+    <h1>Every hour you've spent on Discord, <em>from your own data.</em></h1>
+    <p class="sub">Playtime per game, Go Live, voice and messages. Read in your browser, never uploaded.</p>
+    <p class="url">unpacked.lockhart.in</p>
+  </div>
+  <div class="stats">
+    <div class="stat">
+      <div class="label">Games played</div>
+      <div class="value">1,284<small>h</small></div>
+    </div>
+    <div class="stat">
+      <div class="label">Streamed with Go Live</div>
+      <div class="value">612<small>h</small></div>
+    </div>
+    <div class="stat">
+      <div class="label">In voice, by year</div>
+      <div class="bars">
+        <span style="height:22%"></span><span style="height:35%"></span><span style="height:48%"></span>
+        <span style="height:41%"></span><span style="height:66%"></span><span style="height:88%"></span>
+        <span style="height:100%"></span><span style="height:74%"></span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

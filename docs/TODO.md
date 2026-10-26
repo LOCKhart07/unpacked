@@ -23,7 +23,7 @@ Not in priority order, and none of it has to land at once. The full feature list
 ## SEO
 
 - [ ] **Google Search Console:** verify `unpacked.lockhart.in` (a DNS TXT record at Cloudflare) and submit `https://unpacked.lockhart.in/sitemap-index.xml`. Same for Bing Webmaster Tools.
-- [ ] **Social preview image** (`og:image`) so links look good when shared.
+- [x] **Social preview image** (`og:image`) so links look good when shared.
 - [ ] **More guide pages** people search for, e.g. how Discord's profile badges are counted, and what's in the data package.
 
 ## Loose ends
