@@ -601,7 +601,28 @@ function render(data: PackageData, apps: Apps) {
       <h2>Playtime</h2>
       <p class="muted small">The package has a single total per game, with no dates, so this can't be split by year.</p>
       ${ranked(play.rows.map((r) => [r.name, r.seconds]), "games", play.total, hours, rowIcon, 20)}
+    </section>
+    ${longestGames()}`;
+
+  // Single sessions only come from overlay_usage_stats, which is patchy: say so.
+  const longestGames = () => {
+    const ss = data.gameSessions;
+    if (!ss.length) return "";
+    const first = ss.reduce((a, r) => Math.min(a, r.t), Infinity);
+    const top = [...ss].sort((a, b) => b.sec - a.sec).slice(0, 10);
+    return `
+    <section class="card">
+      <h2>Longest gaming sessions</h2>
+      <div class="notice">Only partial: Discord only logs single sessions from ${esc(date(first))} on, and only some
+        of them (the ones its game overlay tracked), so older and missed sessions aren't here. Your real longest
+        session may be longer.</div>
+      <table class="plain">${top.map((r) => {
+        const name = (r.id && names[r.id]) || r.name || "Unknown game";
+        return `<tr><td>${esc(date(r.t))}</td><td>${esc(name)}</td><td class="num">${esc(hours(r.sec))}</td></tr>`;
+      }).join("")}</table>
+      <p class="muted small">${esc(count(ss.length))} sessions logged.</p>
     </section>`;
+  };
 
   const streaming = () => {
     const s = streams(data.streams, range, streamName);

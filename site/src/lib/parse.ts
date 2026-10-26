@@ -46,6 +46,15 @@ export interface SessionRec {
   os: string; // "Windows", "Android", ...
 }
 
+// One game session from overlay_usage_stats, which Discord only logs from
+// late 2023 on, and not for every session.
+export interface GameSessionRec {
+  t: number; // end
+  sec: number;
+  id: string | null;
+  name: string;
+}
+
 // Events that are only counted, each kept as a list of times so ranges work.
 export const COUNTED = [
   "app_opened", "join_voice_channel", "join_call", "add_reaction", "message_edited",
@@ -111,6 +120,7 @@ export interface PackageData {
   streams: StreamRec[];
   voice: VoiceRec[];
   sessions: SessionRec[];
+  gameSessions: GameSessionRec[];
   counted: Record<Counted, number[]>;
   channels: Channel[];
   messages: MessageRec[];
@@ -135,7 +145,7 @@ const STREAM_ROLES: Record<string, number> = {
   "default/receiver": 3,
 };
 
-const NEEDLES = ["video_stream_ended", "voice_disconnect", "leave_voice_channel", "session_start", "session_end", ...COUNTED].map(
+const NEEDLES = ["video_stream_ended", "voice_disconnect", "leave_voice_channel", "session_start", "session_end", "overlay_usage_stats", ...COUNTED].map(
   (t) => `"event_type":"${t}"`,
 );
 
@@ -290,6 +300,7 @@ export async function parsePackage(
     streams: [],
     voice: [],
     sessions: [],
+    gameSessions: [],
     counted: Object.fromEntries(COUNTED.map((k) => [k, []])) as unknown as Record<Counted, number[]>,
     channels: [],
     messages: [],
@@ -383,6 +394,7 @@ export type Ev = { id: string; t: number; zone: string | null } & (
   | { k: "start" | "end"; session: string | null; os: string }
   | { k: "count"; type: Counted }
   | { k: "stream"; rec: StreamRec | null; rtc: string | null }
+  | { k: "game"; rec: GameSessionRec | null }
   // `streamConn`: connected seconds of a Go Live connection, which has no rec.
   | { k: "voice"; rec: VoiceRec | null; rtc: string | null; streamConn?: number | null }
 );
@@ -402,6 +414,13 @@ function extractEvent(line: string): Ev | null {
       session: typeof d.session === "string" && d.session ? d.session : null, os: String(d.os ?? "") };
   }
   if ((COUNTED as readonly string[]).includes(type)) return { ...head, k: "count", type: type as Counted };
+  if (type === "overlay_usage_stats") {
+    // Launchers (Steam, Battle.net) run alongside the game; game_duration is ms.
+    const sec = num(d.game_duration) / 1000;
+    return { ...head, k: "game", rec: d.game_is_launcher === true || !sec ? null : {
+      t, sec, id: d.game_id ? String(d.game_id) : null, name: String(d.game_name ?? ""),
+    } };
+  }
   if (type === "video_stream_ended") {
     const role = STREAM_ROLES[`${d.context}/${d.participant_type}`];
     return { ...head, k: "stream", rtc: d.rtc_connection_id ? String(d.rtc_connection_id) : null, rec: role === undefined ? null : {
@@ -465,6 +484,7 @@ export async function scanEvents(
           if (ev) {
             onEvent(ev);
             if (ev.k === "stream" && ev.rec?.appId) onApp(ev.rec.appId);
+            if (ev.k === "game" && ev.rec?.id) onApp(ev.rec.id);
           }
           i = body.indexOf(needle, e);
         }
@@ -509,6 +529,8 @@ class EventFolder {
       else if (!this.starts.has(ev.session) || t < this.starts.get(ev.session)!.t) this.starts.set(ev.session, { t, os: ev.os });
     } else if (ev.k === "count") {
       data.counted[ev.type].push(t);
+    } else if (ev.k === "game") {
+      if (ev.rec) data.gameSessions.push(ev.rec);
     } else if (ev.k === "stream") {
       if (!ev.rec) return;
       data.streams.push(ev.rec);
