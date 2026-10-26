@@ -182,3 +182,24 @@ details summary { cursor: pointer; color: var(--accent-2); margin-top: 10px; }
 .tile.has-img img { flex: none; width: 56px; height: 56px; border-radius: 12px; object-fit: cover; background: var(--surface-2); }
 .tile.has-img > div { min-width: 0; }
 .row-icon { display: inline-block; width: 24px; height: 24px; border-radius: 6px; margin-right: 10px; vertical-align: middle; background: var(--surface-2); object-fit: cover; }
+
+.head-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* Share image dialog. The canvas is 2400×1260; CSS scales it to fit. */
+.share {
+  width: min(880px, 100% - 32px);
+  max-height: calc(100dvh - 32px);
+  padding: 20px 24px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.share::backdrop { background: rgb(0 0 0 / 0.6); }
+.share-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+.share-head h2 { margin: 0; }
+.share .chips { padding-bottom: 12px; }
+.share canvas { display: block; width: 100%; height: auto; aspect-ratio: 1200 / 630; border-radius: 10px; border: 1px solid var(--border); background: #0f1014; }
+.share-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-block: 14px 8px; }
+.share-actions .check { display: flex; align-items: center; gap: 6px; margin-right: auto; cursor: pointer; }
+.share p { margin: 0; }

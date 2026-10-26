@@ -7,6 +7,7 @@ import {
   ranges, streamNamer, streams, voice,
   type MessageStats, type Range, type Series,
 } from "./stats.ts";
+import { cardBlob, drawCard, type CardData } from "./share-card.ts";
 import { wordCloud } from "./wordcloud.ts";
 import type { WorkerMessage } from "./worker.ts";
 
@@ -250,6 +251,77 @@ const tabFromHash = (): TabId => TABS.find((t) => `#${t.id}` === location.hash)?
 let redraw: (() => void) | null = null;
 window.addEventListener("hashchange", () => redraw?.());
 
+// ---- Share image -------------------------------------------------------
+
+// Set by render(): the ranges to offer and how to fill the card for one.
+let share: { ranges: Range[]; card: (r: Range) => CardData } | null = null;
+let shareRange: Range = LIFETIME;
+let shareBlob: Promise<Blob> | null = null;
+let shareDraws = 0; // icons load async, so only the latest draw may finish
+const dialog = $<HTMLDialogElement>("#share");
+const canvas = $<HTMLCanvasElement>("#share-canvas");
+const showName = $<HTMLInputElement>("#share-name");
+const shareStatus = $<HTMLElement>("#share-status");
+const copyBtn = $<HTMLButtonElement>("#share-copy");
+const nativeBtn = $<HTMLButtonElement>("#share-native");
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+const shareFile = (b: Blob) => new File([b], `unpacked-${slug(shareRange.label)}.png`, { type: "image/png" });
+
+copyBtn.hidden = !("ClipboardItem" in window && navigator.clipboard?.write);
+nativeBtn.hidden = !navigator.canShare?.({ files: [new File([""], "x.png", { type: "image/png" })] });
+
+async function drawShare() {
+  if (!share) return;
+  const card = share.card(shareRange);
+  if (!showName.checked) card.name = null;
+  $<HTMLElement>("#share-ranges").innerHTML = share.ranges.map((r, i) =>
+    `<button class="chip" data-i="${i}" aria-pressed="${r.label === shareRange.label}">${esc(r.label)}</button>`).join("");
+  shareStatus.textContent = "";
+  const n = ++shareDraws;
+  const done = drawCard(canvas, card, getComputedStyle(document.body).fontFamily, () => n === shareDraws);
+  shareBlob = done.then(() => cardBlob(canvas));
+  await done;
+}
+
+function openShare(r: Range) {
+  shareRange = r;
+  dialog.showModal();
+  drawShare();
+}
+
+$<HTMLElement>("#share-ranges").addEventListener("click", (e) => {
+  const chip = (e.target as HTMLElement).closest<HTMLButtonElement>(".chip");
+  if (!chip || !share) return;
+  shareRange = share.ranges[Number(chip.dataset.i)];
+  drawShare();
+});
+showName.addEventListener("change", drawShare);
+$<HTMLButtonElement>("#share-close").addEventListener("click", () => dialog.close());
+// Clicks on the backdrop land on the dialog itself.
+dialog.addEventListener("click", (e) => { if (e.target === dialog) dialog.close(); });
+
+copyBtn.addEventListener("click", async () => {
+  try {
+    // Safari wants the ClipboardItem made during the click, with a promise.
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": shareBlob! })]);
+    shareStatus.textContent = "Copied. Paste it into Discord.";
+  } catch {
+    shareStatus.textContent = "Couldn't copy here. Use Download instead.";
+  }
+});
+$<HTMLButtonElement>("#share-download").addEventListener("click", async () => {
+  const url = URL.createObjectURL(shareFile(await shareBlob!));
+  Object.assign(document.createElement("a"), { href: url, download: `unpacked-${slug(shareRange.label)}.png` }).click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+nativeBtn.addEventListener("click", async () => {
+  try {
+    await navigator.share({ files: [shareFile(await shareBlob!)] });
+  } catch {
+    // Cancelled from the share sheet.
+  }
+});
+
 function render(data: PackageData, apps: Apps) {
   const { names, icons, aliases } = apps;
   const streamName = streamNamer(apps);
@@ -285,6 +357,33 @@ function render(data: PackageData, apps: Apps) {
   const daysIn = (r: Range) => Math.max(1, (Math.min(r.to, span.last + 1) - Math.max(r.from, span.first)) / DAY);
   const perDay = (sec: number, r: Range) => `${hours(sec / daysIn(r))} a day`;
   const since = (r: Range) => (r === LIFETIME ? ` since ${date(span.first)}` : "");
+
+  // Playtime has no dates, so it's only on the lifetime card; other ranges
+  // show watch time and the most streamed games instead.
+  const cardFor = (r: Range): CardData => {
+    const s = streams(data.streams, r, streamName);
+    const v = voice(data.voice, r, data);
+    const m = messagesFor(r);
+    const lifetime = r === LIFETIME;
+    const streamed = s.topApps.filter(([name]) => name !== SCREEN_SHARE).slice(0, 3);
+    return {
+      name: data.user ? who : null,
+      range: r.label,
+      period: span.last ? `${date(Math.max(r.from, span.first))} to ${date(Math.min(r.to - 1, span.last))}` : "",
+      stats: [
+        lifetime ? ["Playing games", hours(play.total)] : ["Watching streams", hours(s.seconds[1])],
+        ["In voice", hours(v.total)],
+        ["Streaming on Go Live", hours(s.seconds[0])],
+        ["Messages sent", count(m.count)],
+      ],
+      listTitle: lifetime ? "Most played games" : "Most streamed games",
+      list: lifetime
+        ? play.rows.slice(0, 3).map((g) => ({ name: g.name, value: hours(g.seconds), icon: iconUrl(g.ids) }))
+        : streamed.map(([name, sec]) => ({ name, value: hours(sec), icon: iconForName(name) })),
+      sample: demo,
+    };
+  };
+  share = { ranges: all, card: cardFor };
 
   const overview = () => {
     const s = streams(data.streams, LIFETIME, streamName);
@@ -503,7 +602,10 @@ function render(data: PackageData, apps: Apps) {
           <h1>${esc(who)}</h1>
           <p class="muted">${span.last ? `Data from ${strong(date(span.first))} to ${strong(date(span.last))}.` : ""} Nothing left your browser.</p>
         </div>
-        <button class="button ghost small" id="again">Open another package</button>
+        <div class="head-actions">
+          <button class="button small" id="share-open">Share image</button>
+          <button class="button ghost small" id="again">Open another package</button>
+        </div>
       </div>
       ${demo ? `<div class="notice demo">This is <strong>made-up sample data</strong>, so you can see what Unpacked shows.
         <a href="/stats/">Open your own package</a></div>` : ""}
@@ -532,8 +634,11 @@ function render(data: PackageData, apps: Apps) {
         range = all[Number(c.dataset.i)];
         draw();
       }));
+    // The card starts on the range the viewer is looking at.
+    $<HTMLButtonElement>("#share-open").addEventListener("click", () => openShare(ranged ? range : LIFETIME));
     $<HTMLButtonElement>("#again").addEventListener("click", () => {
       redraw = null;
+      share = null;
       input.value = "";
       show("drop");
     });

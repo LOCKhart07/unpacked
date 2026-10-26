@@ -39,6 +39,23 @@ import "../styles/stats.css";
     </section>
 
     <section id="results" hidden></section>
+
+    <dialog id="share" class="share" aria-labelledby="share-title">
+      <div class="share-head">
+        <h2 id="share-title">Share your stats</h2>
+        <button class="button ghost small" id="share-close">Close</button>
+      </div>
+      <div class="chips" id="share-ranges" role="group" aria-label="Time range"></div>
+      <canvas id="share-canvas" aria-label="Preview of the image"></canvas>
+      <div class="share-actions">
+        <label class="check"><input type="checkbox" id="share-name" checked /> Show my name</label>
+        <span class="muted small" id="share-status" aria-live="polite"></span>
+        <button class="button ghost small" id="share-native" hidden>Share…</button>
+        <button class="button ghost small" id="share-download">Download PNG</button>
+        <button class="button small" id="share-copy" hidden>Copy image</button>
+      </div>
+      <p class="muted small">The image is made in your browser. Copy it and paste it straight into Discord.</p>
+    </dialog>
   </div>
 </Base>
 
