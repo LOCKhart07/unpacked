@@ -347,123 +347,242 @@ export async function parsePackage(
   const eventFiles = entries.filter((e) => /^events-.*\.json$/.test(base(e.name)));
   if (!eventFiles.length) missing.push("Activity (events-*.json): needed for streaming, voice and badge comparisons.");
   const total = eventFiles.reduce((s, e) => s + e.size, 0);
-  let done = 0;
-  const seen = new Set<string>();
-  const zones = new Map<string, number>();
-  // Session id -> earliest start / latest end, paired once all files are read.
-  const starts = new Map<string, { t: number; os: string }>();
-  const ends = new Map<string, number>();
-  const streamApps = new Set<string>(); // passed to onAppIds already
-
-  const handle = (line: string) => {
-    let d: Record<string, unknown>;
-    try {
-      d = JSON.parse(line);
-    } catch {
-      return;
-    }
-    const id = String(d.event_id);
-    if (seen.has(id)) return;
-    seen.add(id);
-    const t = eventTime(d);
-    if (!Number.isFinite(t)) return;
-    if (t > data.lastEvent) data.lastEvent = t;
-    if (typeof d.time_zone === "string" && d.time_zone) zones.set(d.time_zone, (zones.get(d.time_zone) ?? 0) + 1);
-
-    const type = String(d.event_type);
-    if (type === "session_start" || type === "session_end") {
-      const id = typeof d.session === "string" ? d.session : null;
-      if (!id) return;
-      if (type === "session_end") ends.set(id, Math.max(t, ends.get(id) ?? t));
-      else if (!starts.has(id) || t < starts.get(id)!.t) starts.set(id, { t, os: String(d.os ?? "") });
-      return;
-    }
-    if (type in data.counted) {
-      data.counted[type as Counted].push(t);
-      return;
-    }
-    if (d.event_type === "video_stream_ended") {
-      const role = STREAM_ROLES[`${d.context}/${d.participant_type}`];
-      if (role === undefined) return;
-      const appId = d.share_application_id ? String(d.share_application_id) : null;
-      if (appId && !streamApps.has(appId)) {
-        streamApps.add(appId);
-        onAppIds([appId], data.libraryNames);
-      }
-      data.streams.push({
-        t,
-        role,
-        sec: num(d.duration),
-        app: String(d.share_application_name ?? ""),
-        appId,
-        exe: d.share_application_executable ? String(d.share_application_executable).toLowerCase() : null,
-        viewers: num(d.max_viewers),
-      });
-      return;
-    }
-    const lv = d.event_type === "leave_voice_channel";
-    // voice_disconnect also fires for the separate connection Go Live opens
-    // (context=stream); counting it would add stream time to voice time.
-    if (!lv && d.context === "stream") return;
-    data.voice.push({
-      t,
-      src: lv ? "lv" : "vd",
-      sec: num(d.duration) / 1000, // milliseconds in both event types
-      kind: String(d.channel_type ?? ""),
-      guild: d.guild_id && d.guild_id !== "0" ? String(d.guild_id) : null,
-      channel: d.channel_id ? String(d.channel_id) : null,
-      conn: lv ? null : secs(d, "duration_connected"),
-      speak: lv ? 0 : secs(d, "duration_speaking") ?? 0,
-      listen: lv ? 0 : secs(d, "duration_listening") ?? 0,
-    });
+  const progress = (done: number) => onProgress({ phase: "Reading activity events", done, total });
+  // Streamed apps are named while the rest is read; the first time each shows up is enough.
+  const streamApps = new Set<string>();
+  const onApp = (id: string) => {
+    if (streamApps.has(id)) return;
+    streamApps.add(id);
+    onAppIds([id], data.libraryNames);
   };
 
-  for (const file of eventFiles) {
-    const reader = (await entryStream(zip, file)).getReader();
-    const decoder = new TextDecoder();
-    let carry = "";
-    let lastReport = 0;
-    for (;;) {
-      const { value, done: end } = await reader.read();
-      const text = carry + (end ? decoder.decode() : decoder.decode(value, { stream: true }));
-      // Only complete lines; the tail waits for the next chunk.
-      const cut = end ? text.length : text.lastIndexOf("\n");
-      if (cut < 0) {
-        carry = text;
-      } else {
-        const body = text.slice(0, cut);
-        carry = text.slice(cut + 1);
-        // Search the chunk for the few event types we need instead of
-        // splitting millions of lines; JSON.parse only runs on matches.
-        for (const needle of NEEDLES) {
-          let i = body.indexOf(needle);
-          while (i !== -1) {
-            const s = body.lastIndexOf("\n", i) + 1;
-            let e = body.indexOf("\n", i);
-            if (e === -1) e = body.length;
-            handle(body.slice(s, e));
-            i = body.indexOf(needle, e);
-          }
-        }
-      }
-      if (end) break;
-      done += value.byteLength;
-      if (done - lastReport > 8_000_000) {
-        lastReport = done;
-        onProgress({ phase: "Reading activity events", done, total });
-      }
+  // Several files are read at the same time, one worker each. The duplicates
+  // between files can differ (timestamps a few seconds apart), so the results
+  // are applied in file order afterwards, exactly as reading them one by one.
+  const fold = new EventFolder(data);
+  const lists = eventFiles.length > 1 ? await readInWorkers(zip, eventFiles, progress, onApp) : null;
+  if (lists) {
+    for (const list of lists) for (const ev of list) fold.add(ev);
+  } else {
+    let before = 0;
+    for (const file of eventFiles) {
+      await scanEvents(zip, file, (ev) => fold.add(ev), (n) => progress(before + n), onApp);
+      before += file.size;
     }
   }
-  data.timeZones = [...zones].sort((a, b) => b[1] - a[1]).map(([z]) => z);
-  // Sessions without an end (the app crashed, or the end fell outside the
-  // export) have no length, so they're left out.
-  for (const [id, st] of starts) {
-    const end = ends.get(id);
-    if (end !== undefined && end >= st.t) data.sessions.push({ t: st.t, sec: (end - st.t) / 1000, os: st.os });
-  }
-  data.sessions.sort((a, b) => a.t - b.t);
+  fold.finish();
 
   return data;
+}
+
+// ---- Activity events -------------------------------------------------------
+
+// One matching event line, reduced to what EventFolder needs. Small enough to
+// send back from a worker by the hundred thousand.
+export type Ev = { id: string; t: number; zone: string | null } & (
+  | { k: "start" | "end"; session: string | null; os: string }
+  | { k: "count"; type: Counted }
+  | { k: "stream"; rec: StreamRec | null }
+  | { k: "voice"; rec: VoiceRec | null }
+);
+
+function extractEvent(line: string): Ev | null {
+  let d: Record<string, unknown>;
+  try {
+    d = JSON.parse(line);
+  } catch {
+    return null;
+  }
+  const t = eventTime(d);
+  const head = { id: String(d.event_id), t, zone: typeof d.time_zone === "string" && d.time_zone ? d.time_zone : null };
+  const type = String(d.event_type);
+  if (type === "session_start" || type === "session_end") {
+    return { ...head, k: type === "session_end" ? "end" : "start",
+      session: typeof d.session === "string" && d.session ? d.session : null, os: String(d.os ?? "") };
+  }
+  if ((COUNTED as readonly string[]).includes(type)) return { ...head, k: "count", type: type as Counted };
+  if (type === "video_stream_ended") {
+    const role = STREAM_ROLES[`${d.context}/${d.participant_type}`];
+    return { ...head, k: "stream", rec: role === undefined ? null : {
+      t,
+      role,
+      sec: num(d.duration),
+      app: String(d.share_application_name ?? ""),
+      appId: d.share_application_id ? String(d.share_application_id) : null,
+      exe: d.share_application_executable ? String(d.share_application_executable).toLowerCase() : null,
+      viewers: num(d.max_viewers),
+    } };
+  }
+  const lv = type === "leave_voice_channel";
+  // voice_disconnect also fires for the separate connection Go Live opens
+  // (context=stream); counting it would add stream time to voice time.
+  return { ...head, k: "voice", rec: !lv && d.context === "stream" ? null : {
+    t,
+    src: lv ? "lv" : "vd",
+    sec: num(d.duration) / 1000, // milliseconds in both event types
+    kind: String(d.channel_type ?? ""),
+    guild: d.guild_id && d.guild_id !== "0" ? String(d.guild_id) : null,
+    channel: d.channel_id ? String(d.channel_id) : null,
+    conn: lv ? null : secs(d, "duration_connected"),
+    speak: lv ? 0 : secs(d, "duration_speaking") ?? 0,
+    listen: lv ? 0 : secs(d, "duration_listening") ?? 0,
+  } };
+}
+
+// Reads one events file, passing each matching event to `onEvent` in a fixed
+// order (chunk by chunk, event type by event type). Used inline and by
+// events-worker.ts, so both see the same events in the same order. `onBytes`
+// gets the uncompressed bytes read so far.
+export async function scanEvents(
+  zip: Blob, file: ZipEntry, onEvent: (ev: Ev) => void, onBytes: (n: number) => void, onApp: (id: string) => void,
+) {
+  const reader = (await entryStream(zip, file)).getReader();
+  const decoder = new TextDecoder();
+  let carry = "";
+  let done = 0, lastReport = 0;
+  for (;;) {
+    const { value, done: end } = await reader.read();
+    const text = carry + (end ? decoder.decode() : decoder.decode(value, { stream: true }));
+    // Only complete lines; the tail waits for the next chunk.
+    const cut = end ? text.length : text.lastIndexOf("\n");
+    if (cut < 0) {
+      carry = text;
+    } else {
+      const body = text.slice(0, cut);
+      carry = text.slice(cut + 1);
+      // Search the chunk for the few event types we need instead of
+      // splitting millions of lines; JSON.parse only runs on matches.
+      for (const needle of NEEDLES) {
+        let i = body.indexOf(needle);
+        while (i !== -1) {
+          const s = body.lastIndexOf("\n", i) + 1;
+          let e = body.indexOf("\n", i);
+          if (e === -1) e = body.length;
+          const ev = extractEvent(body.slice(s, e));
+          if (ev) {
+            onEvent(ev);
+            if (ev.k === "stream" && ev.rec?.appId) onApp(ev.rec.appId);
+          }
+          i = body.indexOf(needle, e);
+        }
+      }
+    }
+    if (end) break;
+    done += value.byteLength;
+    if (done - lastReport > 8_000_000) {
+      lastReport = done;
+      onBytes(done);
+    }
+  }
+}
+
+// Applies events in order: the first copy of an event_id wins.
+class EventFolder {
+  private seen = new Set<string>();
+  private zones = new Map<string, number>();
+  // Session id -> earliest start / latest end, paired once everything is added.
+  private starts = new Map<string, { t: number; os: string }>();
+  private ends = new Map<string, number>();
+  private data: PackageData;
+  constructor(data: PackageData) {
+    this.data = data;
+  }
+
+  add(ev: Ev) {
+    if (this.seen.has(ev.id)) return;
+    this.seen.add(ev.id);
+    const t = ev.t;
+    if (!Number.isFinite(t)) return;
+    const data = this.data;
+    if (t > data.lastEvent) data.lastEvent = t;
+    if (ev.zone) this.zones.set(ev.zone, (this.zones.get(ev.zone) ?? 0) + 1);
+    if (ev.k === "start" || ev.k === "end") {
+      if (!ev.session) return;
+      if (ev.k === "end") this.ends.set(ev.session, Math.max(t, this.ends.get(ev.session) ?? t));
+      else if (!this.starts.has(ev.session) || t < this.starts.get(ev.session)!.t) this.starts.set(ev.session, { t, os: ev.os });
+    } else if (ev.k === "count") {
+      data.counted[ev.type].push(t);
+    } else if (ev.k === "stream") {
+      if (ev.rec) data.streams.push(ev.rec);
+    } else if (ev.k === "voice" && ev.rec) {
+      data.voice.push(ev.rec);
+    }
+  }
+
+  finish() {
+    const data = this.data;
+    data.timeZones = [...this.zones].sort((a, b) => b[1] - a[1]).map(([z]) => z);
+    // Sessions without an end (the app crashed, or the end fell outside the
+    // export) have no length, so they're left out.
+    for (const [id, st] of this.starts) {
+      const end = this.ends.get(id);
+      if (end !== undefined && end >= st.t) data.sessions.push({ t: st.t, sec: (end - st.t) / 1000, os: st.os });
+    }
+    data.sessions.sort((a, b) => a.t - b.t);
+  }
+}
+
+export type EventsWorkerMessage =
+  | { type: "bytes"; n: number }
+  | { type: "app"; id: string }
+  | { type: "done"; list: Ev[] }
+  | { type: "error"; message: string };
+
+// Reads each file in its own worker (biggest first, a few at a time) and
+// returns the lists in file order. Null when workers aren't available or one
+// fails: the caller then reads the files one by one, so the worst case is the
+// old speed, never a wrong result.
+async function readInWorkers(
+  zip: Blob, files: ZipEntry[], onBytes: (n: number) => void, onApp: (id: string) => void,
+): Promise<Ev[][] | null> {
+  if (typeof Worker === "undefined") return null;
+  const cores = (typeof navigator !== "undefined" && navigator.hardwareConcurrency) || 2;
+  const slots = Math.min(files.length, Math.max(2, cores - 1));
+  const read = new Array<number>(files.length).fill(0);
+  const lists = new Array<Ev[]>(files.length);
+  const order = files.map((_, i) => i).sort((a, b) => files[b].size - files[a].size);
+  const running = new Set<Worker>();
+
+  const one = (i: number) => new Promise<void>((resolve, reject) => {
+    const w = new Worker(new URL("./events-worker.ts", import.meta.url), { type: "module" });
+    running.add(w);
+    w.onmessage = (e: MessageEvent<EventsWorkerMessage>) => {
+      const m = e.data;
+      if (m.type === "bytes") {
+        read[i] = m.n;
+        onBytes(read.reduce((s, n) => s + n, 0));
+      } else if (m.type === "app") {
+        onApp(m.id);
+      } else {
+        w.terminate();
+        running.delete(w);
+        if (m.type === "done") {
+          lists[i] = m.list;
+          read[i] = files[i].size;
+          resolve();
+        } else {
+          reject(new Error(m.message));
+        }
+      }
+    };
+    w.onerror = (e) => {
+      e.preventDefault();
+      reject(new Error(e.message || "events worker failed"));
+    };
+    w.postMessage({ zip, file: files[i] });
+  });
+
+  try {
+    const queue = [...order];
+    await Promise.all(Array.from({ length: slots }, async () => {
+      for (let i = queue.shift(); i !== undefined; i = queue.shift()) await one(i);
+    }));
+    return lists;
+  } catch {
+    return null;
+  } finally {
+    for (const w of running) w.terminate();
+  }
 }
 
 // ---- Messages --------------------------------------------------------------
