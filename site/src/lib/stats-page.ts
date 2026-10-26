@@ -1,7 +1,7 @@
 // The /stats/ page: file input, worker, progress, and rendering the results.
 // Plain DOM; every value from the package goes through esc().
 
-import { appIcon, type Apps, type PackageData } from "./parse.ts";
+import { appIcon, type Apps, type PackageData, type Payment } from "./parse.ts";
 import {
   BADGE_START, LIFETIME, SCREEN_SHARE, STREAM_ROLE_LABELS, badges, canonName, dataSpan, gameIcon, hours, idsByName, messages, pct, playtime,
   localDate, ranges, setTimeZone, streamNamer, streams, timeZone, voice,
@@ -284,8 +284,54 @@ const TABS = [
   { id: "voice", label: "Voice", ranged: true },
   { id: "messages", label: "Messages", ranged: true },
   { id: "badges", label: "Badges", ranged: false },
+  { id: "account", label: "Account", ranged: false },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
+
+// ---- Account tab helpers ----------------------------------------------
+
+// Discord ids encode when they were made: milliseconds since 2015 in the top bits.
+const snowflakeTime = (id: string) => Number(BigInt(id) >> 22n) + 1_420_070_400_000;
+
+function age(t: number) {
+  const years = (Date.now() - t) / (365.25 * DAY);
+  return years >= 1 ? `${Math.floor(years)} ${Math.floor(years) === 1 ? "year" : "years"}`
+    : `${Math.max(1, Math.round(years * 12))} months`;
+}
+
+const FLAG_LABELS: Record<string, string> = {
+  STAFF: "Discord Staff", PARTNER: "Partnered Server Owner", HYPESQUAD: "HypeSquad Events",
+  BUG_HUNTER_LEVEL_1: "Bug Hunter", BUG_HUNTER_LEVEL_2: "Gold Bug Hunter",
+  HYPESQUAD_ONLINE_HOUSE_1: "HypeSquad Bravery", HYPESQUAD_ONLINE_HOUSE_2: "HypeSquad Brilliance",
+  HYPESQUAD_ONLINE_HOUSE_3: "HypeSquad Balance", PREMIUM_EARLY_SUPPORTER: "Early Supporter",
+  VERIFIED_DEVELOPER: "Early Verified Bot Developer", CERTIFIED_MODERATOR: "Moderator Programs Alumni",
+  ACTIVE_DEVELOPER: "Active Developer",
+};
+const titleCase = (s: string) => s.toLowerCase().replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+const flagLabel = (f: string) => FLAG_LABELS[f] ?? titleCase(f);
+
+const CONNECTIONS: Record<string, string> = {
+  battlenet: "Battle.net", bluesky: "Bluesky", bungie: "Bungie.net", crunchyroll: "Crunchyroll", domain: "Domain",
+  ebay: "eBay", epicgames: "Epic Games", facebook: "Facebook", github: "GitHub", instagram: "Instagram",
+  leagueoflegends: "League of Legends", paypal: "PayPal", playstation: "PlayStation", reddit: "Reddit",
+  riotgames: "Riot Games", roblox: "Roblox", spotify: "Spotify", steam: "Steam", tiktok: "TikTok",
+  twitch: "Twitch", twitter: "X (Twitter)", xbox: "Xbox", youtube: "YouTube",
+};
+const connectionLabel = (t: string) => CONNECTIONS[t] ?? titleCase(t);
+
+// Amounts are in the currency's smallest unit, which isn't always cents (yen has none).
+function money(minor: number, currency: string) {
+  try {
+    const f = new Intl.NumberFormat("en-US", { style: "currency", currency });
+    return f.format(minor / 10 ** (f.resolvedOptions().maximumFractionDigits ?? 2));
+  } catch {
+    return `${(minor / 100).toFixed(2)} ${currency}`;
+  }
+}
+
+const PAYMENT_STATUS: Record<number, string> = { 0: "pending", 2: "failed", 3: "reversed", 5: "cancelled" };
+const paymentNote = (p: Payment) =>
+  p.status === 4 ? (p.amount ? "partly refunded" : "refunded") : PAYMENT_STATUS[p.status] ?? "";
 
 const tabFromHash = (): TabId => TABS.find((t) => `#${t.id}` === location.hash)?.id ?? "overview";
 
@@ -650,8 +696,87 @@ function render(data: PackageData, apps: Apps) {
       </section>`;
     }).join("")}</div>` : `<p class="muted">No profile badges in this package.</p>`;
 
+  const accountTab = () => {
+    const a = data.account;
+    if (!a || !data.user) return `<p class="muted">There's no Account folder (user.json) in this package.</p>`;
+    const created = snowflakeTime(data.user.id);
+    const nitro = a.premiumUntil ? `Nitro until ${strong(date(Date.parse(a.premiumUntil)))}`
+      : a.premiumSince ? `Nitro since ${strong(date(Date.parse(a.premiumSince)))}` : "";
+    const badgeNames = a.flags.filter((f) => !/^(USED_|HAS_)/.test(f)).map(flagLabel);
+    const clients = a.flags.filter((f) => /^USED_.*_CLIENT$/.test(f)).map((f) => f.slice(5, -7).toLowerCase());
+
+    // Every server in the package, ranked by messages you sent there.
+    const sent = new Map<string, number>();
+    for (const m of data.messages) {
+      const c = data.channels[m.c];
+      if (c.kind === "server" && c.server) sent.set(c.server, (sent.get(c.server) ?? 0) + 1);
+    }
+    const servers = Object.values(data.serverNames).map((n) => [n, sent.get(n) ?? 0] as [string, number])
+      .sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]));
+
+    const paid = a.payments.filter((p) => p.status === 1 || p.status === 4);
+    const spent = new Map<string, number>();
+    for (const p of paid) spent.set(p.currency, (spent.get(p.currency) ?? 0) + p.amount);
+
+    return `
+      <section class="card profile">
+        ${a.avatar ? `<img class="avatar" src="${esc(a.avatar)}" alt="" width="88" height="88">`
+          : `<span class="avatar">${esc(who.slice(0, 1).toUpperCase())}</span>`}
+        <div>
+          <h2>${esc(who)}</h2>
+          <p class="muted">@${esc(data.user.username)}${a.legacyUsername ? ` · was ${esc(a.legacyUsername)}` : ""}</p>
+          <p>Account made ${strong(date(created))}, ${esc(age(created))} ago${nitro ? ` · ${nitro}` : ""}${
+            a.boostingSince ? ` · boosting since ${strong(date(Date.parse(a.boostingSince)))}` : ""}</p>
+          ${badgeNames.length ? `<div class="pills">${badgeNames.map((b) => `<span class="pill">${esc(b)}</span>`).join("")}</div>` : ""}
+        </div>
+      </section>
+      <div class="tiles">
+        ${tile("Friends", count(a.friends), [a.pending && `${count(a.pending)} pending`, a.blocked && `${count(a.blocked)} blocked`].filter(Boolean).join(", "))}
+        ${tile("Servers", count(servers.length), `messages in ${count(servers.filter((x) => x[1]).length)} of them`)}
+        ${tile("Connected accounts", count(a.connections.length))}
+        ${tile("Signed-in devices", count(a.devices.length), clients.length ? `has used ${clients.join(", ")}` : "")}
+      </div>
+      <section class="card">
+        <div class="split">
+          <div>
+            <h3>Servers, by messages you sent</h3>
+            ${table(servers.slice(0, 20), undefined, undefined, count)}
+            ${servers.length > 20 ? `<details><summary>Show all ${servers.length} servers</summary>${
+              table(servers.slice(20), servers.reduce((t, x) => t + x[1], 0), servers[0][1], count, undefined, 21)}</details>` : ""}
+          </div>
+          <div>
+            <h3>Connected accounts</h3>
+            ${a.connections.length ? `<table class="plain">${a.connections.map((c) =>
+              `<tr><td>${esc(connectionLabel(c.type))}</td><td class="muted">${esc(c.name)}</td></tr>`).join("")}</table>`
+              : `<p class="muted">None.</p>`}
+            ${a.apps.length ? `<h3>Apps and bots you made</h3><p>${a.apps.map(esc).join(", ")}</p>` : ""}
+          </div>
+        </div>
+      </section>
+      <section class="card">
+        <div class="split">
+          <div>
+            <h3>Money spent on Discord</h3>
+            ${spent.size ? `<div class="lead-value">${[...spent].map(([c, n]) => esc(money(n, c))).join(" + ")}</div>
+              <p class="muted small">Completed payments, minus refunds.</p>` : `<p class="muted">Nothing.</p>`}
+            ${a.payments.length ? `<table class="plain">${a.payments.map((p) => `<tr>
+              <td>${esc(date(p.t))}</td><td>${esc(p.what || "Payment")}${paymentNote(p) ? ` <span class="muted small">${esc(paymentNote(p))}</span>` : ""}</td>
+              <td class="num${p.status === 1 || p.status === 4 ? "" : " muted"}">${esc(money(p.amount, p.currency))}</td></tr>`).join("")}</table>` : ""}
+          </div>
+          <div>
+            <h3>Signed-in devices</h3>
+            ${a.devices.length ? `<table class="plain"><tr class="muted"><td></td><td class="num">Last used</td></tr>${a.devices.map((d) =>
+              `<tr><td>${esc(d.platform.includes(d.os) ? d.platform : [d.platform, d.os].filter(Boolean).join(" on "))}</td><td class="num">${
+                Number.isFinite(d.lastUsed) ? esc(date(d.lastUsed)) : "–"}</td></tr>`).join("")}</table>
+              <p class="muted small">IP addresses are in the package too, but this page doesn't show them.</p>`
+              : `<p class="muted">None listed.</p>`}
+          </div>
+        </div>
+      </section>`;
+  };
+
   const panels: Record<TabId, () => string> = {
-    overview, games, streaming, voice: voiceTab, messages: messagesTab, badges: badgesTab,
+    overview, games, streaming, voice: voiceTab, messages: messagesTab, badges: badgesTab, account: accountTab,
   };
 
   const draw = () => {
@@ -682,7 +807,7 @@ function render(data: PackageData, apps: Apps) {
         ${ranged
           ? `<div class="chips" role="group" aria-label="Time range">${all.map((r, i) =>
               `<button class="chip" data-i="${i}" aria-pressed="${r.label === range.label}">${esc(r.label)}</button>`).join("")}</div>`
-          : `<p class="range-note muted">Lifetime totals</p>`}
+          : `<p class="range-note muted">${tab === "account" ? "From your account settings" : "Lifetime totals"}</p>`}
       </div>
       <div class="panel">${panels[tab]()}</div>
     `;

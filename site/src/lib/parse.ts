@@ -60,8 +60,37 @@ export interface MessageRec {
   att: boolean; // has attachments
 }
 
+// A payment as Discord recorded it. amount is in the currency's smallest
+// unit (cents), after refunds.
+export interface Payment {
+  t: number;
+  what: string;
+  amount: number;
+  currency: string;
+  status: number; // 0 pending, 1 completed, 2 failed, 3 reversed, 4 refunded, 5 cancelled
+}
+
+// The Account tab. Email, phone, IP addresses and date of birth are in the
+// package but deliberately not read, so screenshots of the page are safe.
+export interface Account {
+  avatar: string | null; // data: URL (the CSP allows data: images, not blob:)
+  legacyUsername: string | null; // the old name#1234
+  premiumSince: string | null;
+  premiumUntil: string | null;
+  boostingSince: string | null;
+  flags: string[]; // names, e.g. HYPESQUAD_ONLINE_HOUSE_2
+  friends: number;
+  blocked: number;
+  pending: number;
+  connections: { type: string; name: string }[];
+  devices: { os: string; platform: string; lastUsed: number }[];
+  payments: Payment[];
+  apps: string[]; // applications and bots you made
+}
+
 export interface PackageData {
   user: { id: string; username: string; globalName: string | null } | null;
+  account: Account | null;
   games: GameStat[];
   libraryNames: Record<string, string>;
   badges: OwnedBadge[];
@@ -110,6 +139,100 @@ function secs(d: Record<string, unknown>, key: string): number | null {
   return null;
 }
 
+// Old packages have flags as a bitfield, new ones as a list of names (DP #149).
+const FLAG_BITS: [number, string][] = [
+  [0, "STAFF"], [1, "PARTNER"], [2, "HYPESQUAD"], [3, "BUG_HUNTER_LEVEL_1"],
+  [6, "HYPESQUAD_ONLINE_HOUSE_1"], [7, "HYPESQUAD_ONLINE_HOUSE_2"], [8, "HYPESQUAD_ONLINE_HOUSE_3"],
+  [9, "PREMIUM_EARLY_SUPPORTER"], [14, "BUG_HUNTER_LEVEL_2"], [17, "VERIFIED_DEVELOPER"],
+  [18, "CERTIFIED_MODERATOR"], [22, "ACTIVE_DEVELOPER"],
+];
+function flagNames(f: unknown): string[] {
+  if (Array.isArray(f)) return f.map(String);
+  if (typeof f !== "number") return [];
+  return FLAG_BITS.filter(([bit]) => Math.floor(f / 2 ** bit) % 2 === 1).map(([, name]) => name);
+}
+
+// Relationship types are names in new packages and numbers in old ones.
+const RELATIONSHIPS: Record<string, "friend" | "blocked" | "pending"> = {
+  FRIEND: "friend", 1: "friend", BLOCKED: "blocked", 2: "blocked",
+  PENDING_INCOMING: "pending", 3: "pending", PENDING_OUTGOING: "pending", 4: "pending",
+};
+
+async function dataUrl(zip: Blob, entry: ZipEntry, type: string): Promise<string> {
+  const b = new Uint8Array(await new Response(await entryStream(zip, entry)).arrayBuffer());
+  let bin = "";
+  for (let i = 0; i < b.length; i += 0x8000) bin += String.fromCharCode(...b.subarray(i, i + 0x8000));
+  return `data:${type};base64,${btoa(bin)}`;
+}
+
+type Json = Record<string, any>;
+
+// Everything else next to user.json. Folder names are translated, so files
+// are found by name relative to user.json's folder.
+async function readAccount(zip: Blob, entries: ZipEntry[], userEntry: ZipEntry, u: Json): Promise<Account> {
+  const home = dir(userEntry.name);
+  const avatar = entries.find((e) => e.name === `${home}avatar.png`);
+  const counts = { friend: 0, blocked: 0, pending: 0 };
+  for (const r of u.relationships ?? []) {
+    const kind = RELATIONSHIPS[String(r?.type)];
+    if (kind) counts[kind]++;
+  }
+
+  // New packages: user_data_exports/discord_billing/payments.json as
+  // {records: [...]}. Old ones: user.json → payments.
+  let records: Json[] = Array.isArray(u.payments) ? u.payments : [];
+  const billing = entries.find((e) => e.name.startsWith(home) && base(e.name) === "payments.json");
+  if (billing) {
+    try {
+      const j = JSON.parse(await entryText(zip, billing));
+      if (Array.isArray(j?.records)) records = j.records;
+    } catch {
+      // Unreadable: fall back to user.json's list.
+    }
+  }
+  const payments: Payment[] = records.map((p) => ({
+    t: Date.parse(String(p.created_at)),
+    what: String(p.description ?? p.sku?.name ?? ""),
+    amount: num(p.amount) - num(p.amount_refunded),
+    currency: String(p.currency ?? "usd").toUpperCase(),
+    status: num(p.status),
+  })).filter((p) => Number.isFinite(p.t)).sort((a, b) => b.t - a.t);
+
+  const apps: string[] = [];
+  for (const e of entries) {
+    if (!e.name.startsWith(home) || base(e.name) !== "application.json") continue;
+    try {
+      const a = JSON.parse(await entryText(zip, e));
+      if (a?.name) apps.push(String(a.name));
+    } catch {
+      // Skip a broken file.
+    }
+  }
+
+  const meta = u.user_profile_metadata ?? {};
+  return {
+    avatar: avatar ? await dataUrl(zip, avatar, "image/png").catch(() => null) : null,
+    legacyUsername: meta.legacy_username ?? null,
+    premiumSince: meta.premium_started_at ?? null,
+    premiumUntil: u.premium_until ?? null,
+    boostingSince: meta.boosting_started_at ?? null,
+    flags: flagNames(u.flags),
+    friends: counts.friend,
+    blocked: counts.blocked,
+    pending: counts.pending,
+    // The same account can be linked twice (two Xbox links with one gamertag).
+    connections: [...new Map<string, Account["connections"][number]>((u.connections ?? []).filter((c: Json) => !c?.revoked)
+      .map((c: Json) => [`${c.type}/${c.name}`, { type: String(c.type ?? ""), name: String(c.name ?? "") }])).values()],
+    devices: (u.user_sessions ?? []).map((s: Json) => ({
+      os: String(s?.user_data?.client_info?.os ?? ""),
+      platform: String(s?.user_data?.client_info?.platform ?? ""),
+      lastUsed: Date.parse(String(s?.user_data?.approx_last_used_time)),
+    })).filter((d: Json) => d.os || d.platform).sort((a: Json, b: Json) => (b.lastUsed || 0) - (a.lastUsed || 0)),
+    payments,
+    apps: apps.sort((a, b) => a.localeCompare(b)),
+  };
+}
+
 function eventTime(d: Record<string, unknown>): number {
   return Date.parse(String(d.timestamp).replace(/"/g, ""));
 }
@@ -138,6 +261,7 @@ export async function parsePackage(zip: Blob, onProgress: (p: Progress) => void 
 
   const data: PackageData = {
     user: null,
+    account: null,
     games: [],
     libraryNames: {},
     badges: [],
@@ -172,6 +296,7 @@ export async function parsePackage(zip: Blob, onProgress: (p: Progress) => void 
       const tb = b?.badge?.tier_base;
       if (tb) data.badges.push({ type: b.badge.type, tier: tb.tier, tierObtainedAt: tb.tier_obtained_at ?? {} });
     }
+    data.account = await readAccount(zip, entries, e, u);
     break;
   }
   if (!data.user) missing.push("Account (user.json): needed for playtime per game and badges.");

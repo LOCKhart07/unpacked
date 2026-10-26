@@ -89,9 +89,30 @@ const user = {
   id: "100000000000000001",
   username: "demo_player",
   global_name: "Demo Player",
+  // A new-style package: flags as names, payments in discord_billing/.
+  flags: ["HYPESQUAD_ONLINE_HOUSE_3", "PREMIUM_EARLY_SUPPORTER", "USED_DESKTOP_CLIENT", "USED_MOBILE_CLIENT", "HAS_SESSION_STARTED"],
+  premium_until: "2027-03-14T00:00:00+00:00",
+  relationships: [
+    ...Array.from({ length: 64 }, (_, i) => ({ id: `90000000000000${String(i).padStart(4, "0")}`, type: "FRIEND" })),
+    { id: "900000000000009998", type: "BLOCKED" },
+    { id: "900000000000009999", type: "PENDING_INCOMING" },
+  ],
+  connections: [
+    { type: "steam", name: "demo_player", revoked: false },
+    { type: "spotify", name: "Demo Player", revoked: false },
+    { type: "twitch", name: "demoplayer_live", revoked: false },
+    { type: "xbox", name: "DemoPlayer42", revoked: false },
+    { type: "github", name: "old-account", revoked: true },
+  ],
+  user_sessions: [
+    ["Windows", "Discord Client", "2026-10-20"], ["Android", "Discord Android", "2026-10-19"],
+    ["Windows", "Chrome", "2026-08-02"], ["iOS", "Discord iOS", "2025-12-24"],
+  ].map(([os, platform, day]) => ({ user_data: { approx_last_used_time: `${day}T18:00:00+00:00`, client_info: { os, platform } } })),
   user_activity_application_statistics: stats,
   library_applications: [],
   user_profile_metadata: {
+    legacy_username: "DemoPlayer#4821",
+    premium_started_at: "2020-03-14T00:00:00+00:00",
     owned_badges: [
       { badge: { type: 19, tier_base: { tier: "standout", tier_obtained_at: { newcomer: "2024-11-03", fledgling: "2024-11-10", breakout: "2024-12-20", standout: "2025-05-02" } } } },
       { badge: { type: 20, tier_base: { tier: "devoted", tier_obtained_at: { casual: "2024-11-02", recreational: "2024-11-04", dedicated: "2024-11-20", committed: "2025-02-11", serious: "2025-06-30", devoted: "2026-04-18" } } } },
@@ -230,6 +251,17 @@ for (let day = START; day < END; day += DAY) {
 
 const files: [string, string][] = [
   ["Account/user.json", JSON.stringify(user)],
+  ["Account/user_data_exports/discord_billing/payments.json", JSON.stringify({
+    section: "payments",
+    records: [
+      ...[2020, 2021, 2022, 2023, 2024, 2025, 2026].map((y) =>
+        ({ created_at: `${y}-03-14T09:30:00+00:00`, description: "Nitro Yearly", amount: 9999, amount_refunded: 0, currency: "usd", status: 1 })),
+      { created_at: "2023-12-24T20:00:00+00:00", description: "Nitro Monthly (gift)", amount: 999, amount_refunded: 0, currency: "usd", status: 1 },
+      { created_at: "2024-07-01T12:00:00+00:00", description: "Server Boost", amount: 499, amount_refunded: 499, currency: "usd", status: 4 },
+      { created_at: "2025-02-10T12:00:00+00:00", description: "Nitro Basic Monthly", amount: 299, amount_refunded: 0, currency: "usd", status: 2 },
+    ],
+  })],
+  ["Account/applications/110000000000000001/application.json", JSON.stringify({ id: "110000000000000001", name: "Raid Reminder Bot" })],
   ["Servers/index.json", JSON.stringify(Object.fromEntries(SERVERS))],
   ...SERVERS.map(([id, name]): [string, string] => [`Servers/${id}/guild.json`, JSON.stringify({ id, name })]),
   ["Messages/index.json", JSON.stringify(Object.fromEntries(channels.map((c) => [c.meta.id, c.index])))],
