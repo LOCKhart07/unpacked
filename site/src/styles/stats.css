@@ -215,3 +215,5 @@ details summary { cursor: pointer; color: var(--accent-2); margin-top: 10px; }
 .profile p { margin: 2px 0 0; }
 .avatar { flex: none; width: 88px; height: 88px; border-radius: 50%; object-fit: cover; background: var(--accent); color: #fff; font-size: 2.2rem; font-weight: 700; display: grid; place-items: center; }
 .pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.money > h3 { margin-top: 0; }
+.money table { max-width: 640px; }

@@ -705,14 +705,9 @@ function render(data: PackageData, apps: Apps) {
     const badgeNames = a.flags.filter((f) => !/^(USED_|HAS_)/.test(f)).map(flagLabel);
     const clients = a.flags.filter((f) => /^USED_.*_CLIENT$/.test(f)).map((f) => f.slice(5, -7).toLowerCase());
 
-    // Every server in the package, ranked by messages you sent there.
-    const sent = new Map<string, number>();
-    for (const m of data.messages) {
-      const c = data.channels[m.c];
-      if (c.kind === "server" && c.server) sent.set(c.server, (sent.get(c.server) ?? 0) + 1);
-    }
-    const servers = Object.values(data.serverNames).map((n) => [n, sent.get(n) ?? 0] as [string, number])
-      .sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]));
+    // Servers you're in (the Messages and Voice tabs rank them by activity).
+    const servers = Object.values(data.serverNames);
+    const active = new Set(data.channels.filter((c) => c.kind === "server" && c.server).map((c) => c.server));
 
     const paid = a.payments.filter((p) => p.status === 1 || p.status === 4);
     const spent = new Map<string, number>();
@@ -732,36 +727,18 @@ function render(data: PackageData, apps: Apps) {
       </section>
       <div class="tiles">
         ${tile("Friends", count(a.friends), [a.pending && `${count(a.pending)} pending`, a.blocked && `${count(a.blocked)} blocked`].filter(Boolean).join(", "))}
-        ${tile("Servers", count(servers.length), `messages in ${count(servers.filter((x) => x[1]).length)} of them`)}
+        ${tile("Servers", count(servers.length), `messages in ${count(servers.filter((n) => active.has(n)).length)} of them`)}
         ${tile("Connected accounts", count(a.connections.length))}
         ${tile("Signed-in devices", count(a.devices.length), clients.length ? `has used ${clients.join(", ")}` : "")}
       </div>
       <section class="card">
         <div class="split">
           <div>
-            <h3>Servers, by messages you sent</h3>
-            ${table(servers.slice(0, 20), undefined, undefined, count)}
-            ${servers.length > 20 ? `<details><summary>Show all ${servers.length} servers</summary>${
-              table(servers.slice(20), servers.reduce((t, x) => t + x[1], 0), servers[0][1], count, undefined, 21)}</details>` : ""}
-          </div>
-          <div>
             <h3>Connected accounts</h3>
             ${a.connections.length ? `<table class="plain">${a.connections.map((c) =>
               `<tr><td>${esc(connectionLabel(c.type))}</td><td class="muted">${esc(c.name)}</td></tr>`).join("")}</table>`
               : `<p class="muted">None.</p>`}
             ${a.apps.length ? `<h3>Apps and bots you made</h3><p>${a.apps.map(esc).join(", ")}</p>` : ""}
-          </div>
-        </div>
-      </section>
-      <section class="card">
-        <div class="split">
-          <div>
-            <h3>Money spent on Discord</h3>
-            ${spent.size ? `<div class="lead-value">${[...spent].map(([c, n]) => esc(money(n, c))).join(" + ")}</div>
-              <p class="muted small">Completed payments, minus refunds.</p>` : `<p class="muted">Nothing.</p>`}
-            ${a.payments.length ? `<table class="plain">${a.payments.map((p) => `<tr>
-              <td>${esc(date(p.t))}</td><td>${esc(p.what || "Payment")}${paymentNote(p) ? ` <span class="muted small">${esc(paymentNote(p))}</span>` : ""}</td>
-              <td class="num${p.status === 1 || p.status === 4 ? "" : " muted"}">${esc(money(p.amount, p.currency))}</td></tr>`).join("")}</table>` : ""}
           </div>
           <div>
             <h3>Signed-in devices</h3>
@@ -772,6 +749,14 @@ function render(data: PackageData, apps: Apps) {
               : `<p class="muted">None listed.</p>`}
           </div>
         </div>
+      </section>
+      <section class="card money">
+        <h3>Money spent on Discord</h3>
+        ${spent.size ? `<div class="lead-value">${[...spent].map(([c, n]) => esc(money(n, c))).join(" + ")}</div>
+          <p class="muted small">Completed payments, minus refunds.</p>` : `<p class="muted">Nothing.</p>`}
+        ${a.payments.length ? `<table class="plain">${a.payments.map((p) => `<tr>
+          <td>${esc(date(p.t))}</td><td>${esc(p.what || "Payment")}${paymentNote(p) ? ` <span class="muted small">${esc(paymentNote(p))}</span>` : ""}</td>
+          <td class="num${p.status === 1 || p.status === 4 ? "" : " muted"}">${esc(money(p.amount, p.currency))}</td></tr>`).join("")}</table>` : ""}
       </section>`;
   };
 
