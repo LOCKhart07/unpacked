@@ -39,6 +39,20 @@ export interface VoiceRec {
   listen: number;
 }
 
+// One app session: session_start and session_end paired on their session id.
+export interface SessionRec {
+  t: number; // start
+  sec: number;
+  os: string; // "Windows", "Android", ...
+}
+
+// Events that are only counted, each kept as a list of times so ranges work.
+export const COUNTED = [
+  "app_opened", "join_voice_channel", "join_call", "add_reaction", "message_edited",
+  "application_command_used", "notification_clicked",
+] as const;
+export type Counted = (typeof COUNTED)[number];
+
 export interface OwnedBadge {
   type: number;
   tier: string;
@@ -96,6 +110,8 @@ export interface PackageData {
   badges: OwnedBadge[];
   streams: StreamRec[];
   voice: VoiceRec[];
+  sessions: SessionRec[];
+  counted: Record<Counted, number[]>;
   channels: Channel[];
   messages: MessageRec[];
   serverNames: Record<string, string>;
@@ -118,7 +134,7 @@ const STREAM_ROLES: Record<string, number> = {
   "default/receiver": 3,
 };
 
-const NEEDLES = ["video_stream_ended", "voice_disconnect", "leave_voice_channel"].map(
+const NEEDLES = ["video_stream_ended", "voice_disconnect", "leave_voice_channel", "session_start", "session_end", ...COUNTED].map(
   (t) => `"event_type":"${t}"`,
 );
 
@@ -267,6 +283,8 @@ export async function parsePackage(zip: Blob, onProgress: (p: Progress) => void 
     badges: [],
     streams: [],
     voice: [],
+    sessions: [],
+    counted: Object.fromEntries(COUNTED.map((k) => [k, []])) as unknown as Record<Counted, number[]>,
     channels: [],
     messages: [],
     serverNames: {},
@@ -317,6 +335,9 @@ export async function parsePackage(zip: Blob, onProgress: (p: Progress) => void 
   let done = 0;
   const seen = new Set<string>();
   const zones = new Map<string, number>();
+  // Session id -> earliest start / latest end, paired once all files are read.
+  const starts = new Map<string, { t: number; os: string }>();
+  const ends = new Map<string, number>();
 
   const handle = (line: string) => {
     let d: Record<string, unknown>;
@@ -333,6 +354,18 @@ export async function parsePackage(zip: Blob, onProgress: (p: Progress) => void 
     if (t > data.lastEvent) data.lastEvent = t;
     if (typeof d.time_zone === "string" && d.time_zone) zones.set(d.time_zone, (zones.get(d.time_zone) ?? 0) + 1);
 
+    const type = String(d.event_type);
+    if (type === "session_start" || type === "session_end") {
+      const id = typeof d.session === "string" ? d.session : null;
+      if (!id) return;
+      if (type === "session_end") ends.set(id, Math.max(t, ends.get(id) ?? t));
+      else if (!starts.has(id) || t < starts.get(id)!.t) starts.set(id, { t, os: String(d.os ?? "") });
+      return;
+    }
+    if (type in data.counted) {
+      data.counted[type as Counted].push(t);
+      return;
+    }
     if (d.event_type === "video_stream_ended") {
       const role = STREAM_ROLES[`${d.context}/${d.participant_type}`];
       if (role === undefined) return;
@@ -401,6 +434,13 @@ export async function parsePackage(zip: Blob, onProgress: (p: Progress) => void 
     }
   }
   data.timeZones = [...zones].sort((a, b) => b[1] - a[1]).map(([z]) => z);
+  // Sessions without an end (the app crashed, or the end fell outside the
+  // export) have no length, so they're left out.
+  for (const [id, st] of starts) {
+    const end = ends.get(id);
+    if (end !== undefined && end >= st.t) data.sessions.push({ t: st.t, sec: (end - st.t) / 1000, os: st.os });
+  }
+  data.sessions.sort((a, b) => a.t - b.t);
 
   return data;
 }

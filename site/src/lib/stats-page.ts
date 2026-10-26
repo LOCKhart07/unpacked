@@ -4,7 +4,7 @@
 import { appIcon, type Apps, type PackageData, type Payment } from "./parse.ts";
 import {
   BADGE_START, LIFETIME, SCREEN_SHARE, STREAM_ROLE_LABELS, badges, canonName, dataSpan, gameIcon, hours, idsByName, messages, pct, playtime,
-  localDate, ranges, setTimeZone, streamNamer, streams, timeZone, voice,
+  counts, localDate, ranges, sessions, setTimeZone, streamNamer, streams, timeZone, voice,
   type MessageStats, type Range, type Series,
 } from "./stats.ts";
 import { forgetPackage, loadPackage, savePackage } from "./saved.ts";
@@ -283,10 +283,13 @@ const TABS = [
   { id: "streaming", label: "Streaming", ranged: true },
   { id: "voice", label: "Voice", ranged: true },
   { id: "messages", label: "Messages", ranged: true },
+  { id: "activity", label: "Activity", ranged: true },
   { id: "badges", label: "Badges", ranged: false },
   { id: "account", label: "Account", ranged: false },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
+
+const minutes = (sec: number) => (sec < 3600 ? `${Math.round(sec / 60)} min` : hours(sec));
 
 // ---- Account tab helpers ----------------------------------------------
 
@@ -500,7 +503,9 @@ function render(data: PackageData, apps: Apps) {
     const topGame = s.topApps.find(([name]) => name !== SCREEN_SHARE);
     const voicePeak = peakOf(v.series);
     const busiest = m.count ? m.hours.indexOf(Math.max(...m.hours)) : -1;
+    const open = data.sessions.length ? sessions(data.sessions, LIFETIME).total : 0;
     const facts = [
+      open && `Discord has been open for ${strong(hours(open))} in total, ${esc(perDay(open, LIFETIME))}.`,
       v.connected && `You talked for ${strong(hours(v.speaking))}, ${strong(pct(v.speaking, v.connected))} of your time in voice.`,
       voicePeak && `Your biggest month in voice was ${strong(voicePeak[0])}, with ${strong(hours(voicePeak[1]))}.`,
       v.longest && `Your longest voice call lasted ${strong(hours(v.longest.sec))}, in ${esc(v.longest.where)} on ${esc(date(v.longest.t))}.`,
@@ -760,8 +765,48 @@ function render(data: PackageData, apps: Apps) {
       </section>`;
   };
 
+  const activityTab = () => {
+    if (!data.sessions.length) return `<p class="muted">There are no app sessions in this package's activity data.</p>`;
+    const a = sessions(data.sessions, range);
+    const peak = peakOf(a.series);
+    const c = counts(data, range);
+    const opens = c.find((x) => x.key === "app_opened");
+    const deviceTotal = a.devices.reduce((t, d) => t + d[1], 0);
+    return `
+      <div class="tiles">
+        ${lead("Discord open", hours(a.total), [
+          `${strong(nonstop(a.total))} nonstop`,
+          `${esc(perDay(a.total, range))}${since(range)}`,
+        ])}
+        ${tile("Sessions", count(a.count), a.count ? `${esc(minutes(deviceTotal / a.count))} on average` : "")}
+        ${a.longest ? tile("Longest session", hours(a.longest.sec), `${a.longest.os || "Unknown"}, ${date(a.longest.t)}`) : ""}
+        ${opens ? tile("Times you opened Discord", count(opens.count), `${(opens.count / daysIn(range)).toFixed(1)} a day`) : ""}
+      </div>
+      <section class="card">
+        <div class="card-head"><h2>Time with Discord open</h2>${peak ? `<p class="muted small">Peak: ${strong(peak[0])}, ${esc(hours(peak[1]))}</p>` : ""}</div>
+        ${seriesChart(a.series, hours)}
+        <p class="muted small">From app sessions. Time on your phone and computer at once counts once.</p>
+      </section>
+      <section class="card">
+        <div class="split">
+          <div>
+            <h3>By device</h3>
+            ${table(a.devices, deviceTotal)}
+            <p class="muted small">Each device's own sessions, so overlapping time counts on both.</p>
+          </div>
+          <div>
+            <h3>Things you did</h3>
+            ${c.length ? `<table class="plain">${c.filter((x) => x !== opens).map((x) => `<tr><td>${esc(x.label)}</td><td class="num">${count(x.count)}</td>
+              <td class="num muted small">since ${esc(date(Math.max(x.since!, Number.isFinite(range.from) ? range.from : -Infinity)))}</td></tr>`).join("")}</table>
+              <p class="muted small">Some of these are only recorded for part of your package, so each one says when it starts.</p>`
+              : `<p class="muted">None recorded.</p>`}
+          </div>
+        </div>
+      </section>`;
+  };
+
   const panels: Record<TabId, () => string> = {
-    overview, games, streaming, voice: voiceTab, messages: messagesTab, badges: badgesTab, account: accountTab,
+    overview, games, streaming, voice: voiceTab, messages: messagesTab, activity: activityTab, badges: badgesTab, account: accountTab,
   };
 
   const draw = () => {

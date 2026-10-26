@@ -1,7 +1,7 @@
 // Turns parsed records into the numbers the page shows, for a time range.
 // Pure functions apart from the timezone: used by the page and by scripts/check.ts.
 
-import type { Apps, GameStat, MessageRec, PackageData, StreamRec, VoiceRec } from "./parse.ts";
+import { COUNTED, type Apps, type Counted, type GameStat, type MessageRec, type PackageData, type SessionRec, type StreamRec, type VoiceRec } from "./parse.ts";
 import { makeZone, type Zone } from "./zone.ts";
 
 // Days, months, years and hours are counted in this zone. One zone for
@@ -23,12 +23,13 @@ export const LIFETIME: Range = { from: -Infinity, to: Infinity, label: "Lifetime
 
 const DAY = 86_400_000;
 
-// First and last dated record (streams, voice, messages): the period the
-// package covers.
+// First and last dated record (streams, voice, sessions, messages): the
+// period the package covers.
 export function dataSpan(data: PackageData): { first: number; last: number } {
   let first = data.lastEvent;
   for (const r of data.streams) first = Math.min(first, r.t);
   for (const r of data.voice) first = Math.min(first, r.t);
+  if (data.sessions[0]) first = Math.min(first, data.sessions[0].t); // sorted
   for (const r of data.messages) first = Math.min(first, r.t);
   return { first, last: data.lastEvent };
 }
@@ -419,6 +420,71 @@ export function messages(data: Pick<PackageData, "messages" | "channels">, range
       text: first.text,
     },
   };
+}
+
+// ---- Time on Discord ---------------------------------------------------
+
+// Time with Discord open. Sessions on two devices at once (phone and PC)
+// overlap, so the total is the time covered by any session, not the sum.
+// Sessions are cut at the range's edges; counts, longest and per-device
+// totals use the sessions that start in the range.
+export function sessions(recs: SessionRec[], range: Range) {
+  const sel = recs.filter(inRange(range));
+  const cut = recs
+    .map((r) => [Math.max(r.t, range.from), Math.min(r.t + r.sec * 1000, range.to)] as [number, number])
+    .filter(([a, b]) => b > a)
+    .sort((x, y) => x[0] - y[0]);
+  const merged: [number, number][] = [];
+  for (const [a, b] of cut) {
+    const last = merged[merged.length - 1];
+    if (last && a <= last[1]) last[1] = Math.max(last[1], b);
+    else merged.push([a, b]);
+  }
+  // Over time: each stretch counts toward the day or month it started in.
+  let total = 0;
+  const b = buckets(range, merged[0]?.[0] ?? 0, merged[merged.length - 1]?.[1] ?? 0);
+  for (const [s, e] of merged) {
+    total += (e - s) / 1000;
+    add(b.keys, b.key(s), (e - s) / 1000);
+  }
+  const devices = new Map<string, number>();
+  let longest: SessionRec | null = null;
+  for (const r of sel) {
+    add(devices, r.os || "Unknown", r.sec);
+    if (!longest || r.sec > longest.sec) longest = r;
+  }
+  return {
+    total,
+    count: sel.length,
+    longest: longest && { sec: longest.sec, t: longest.t, os: longest.os },
+    devices: sortedTotals(devices),
+    series: toSeries(b.unit, merged.length ? b.keys : new Map()),
+  };
+}
+
+export const COUNTED_LABELS: Record<Counted, string> = {
+  app_opened: "Times you opened Discord",
+  join_voice_channel: "Voice channels joined",
+  join_call: "Calls joined",
+  add_reaction: "Reactions added",
+  message_edited: "Messages edited",
+  application_command_used: "Slash commands used",
+  notification_clicked: "Notifications tapped",
+};
+
+// How often each counted event happened in the range, and the first one in
+// the whole package: some types are only in part of the package (tns/ only
+// covers recent months), so a count needs its start date next to it.
+export function counts(data: Pick<PackageData, "counted">, range: Range) {
+  return COUNTED.map((k) => {
+    const times = data.counted[k];
+    let n = 0, first = Infinity;
+    for (const t of times) {
+      if (t < first) first = t;
+      if (t >= range.from && t < range.to) n++;
+    }
+    return { key: k, label: COUNTED_LABELS[k], count: n, since: Number.isFinite(first) ? first : null };
+  }).filter((c) => c.since !== null);
 }
 
 // ---- Badges ------------------------------------------------------------

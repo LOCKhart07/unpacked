@@ -17,14 +17,18 @@ if (!out) {
 
 // ---- Random, but repeatable ----------------------------------------------
 
-let seed = 20261026;
-function rand() {
-  // mulberry32
-  seed = (seed + 0x6d2b79f5) | 0;
-  let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+// mulberry32
+function generator(seed: number) {
+  return () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
+const rand = generator(20261026);
+// A separate stream for data added later, so adding it didn't change the rest.
+const rand2 = generator(4821);
 const int = (lo: number, hi: number) => lo + Math.floor(rand() * (hi - lo + 1));
 const pick = <T>(xs: T[]) => xs[Math.floor(rand() * xs.length)];
 // Zipf-ish: early items much more likely.
@@ -157,7 +161,7 @@ const GROUPS = [{ id: "800000000000000001", name: "weekend squad" }, { id: "8000
 const events: string[] = [];
 // Mostly home, with the odd trip, like a real package. Not from rand(), so
 // adding it didn't change the rest of the made-up data.
-const zoneOf = () => (events.length % 40 === 39 ? "Europe/London" : "America/New_York");
+const zoneOf = () => (events.length % 40 === 39 ? "Europe/London" : "Asia/Kolkata");
 const push = (e: Record<string, unknown>) => events.push(JSON.stringify({ event_id: eventId(), time_zone: zoneOf(), ...e }));
 const STREAMED = GAMES.slice(0, 14);
 
@@ -200,6 +204,38 @@ for (let day = START; day < END; day += DAY) {
   if (rand() < 0.04) {
     push({ event_type: "video_stream_ended", timestamp: iso(at()), context: "default", participant_type: rand() < 0.4 ? "sender" : "receiver",
       duration: Math.round((0.1 + rand()) * 3600), max_viewers: 0 });
+  }
+}
+
+// App sessions (desktop evenings, short phone checks) and counted events.
+// Edits and slash commands only for the last six months, like real packages,
+// where they're only in tns/.
+let sessionId = 0;
+const RECENT = END - 182 * DAY;
+for (let day = START; day < END; day += DAY) {
+  const a = activity(day);
+  const session = (os: string, start: number, hours: number) => {
+    const id = `demo-session-${sessionId++}`;
+    push({ event_type: "session_start", timestamp: iso(start), session: id, os });
+    push({ event_type: "session_end", timestamp: iso(start + hours * 3_600_000), session: id, os });
+  };
+  if (rand2() < 0.5 + 0.4 * a) session("Windows", day + (12 + rand2() * 4) * 3_600_000, 0.5 + rand2() * 5 * a);
+  const checks = Math.round(rand2() * 5 * a);
+  for (let i = 0; i < checks; i++) {
+    const at = day + (2 + rand2() * 16) * 3_600_000;
+    session("Android", at, 0.02 + rand2() * 0.3);
+    push({ event_type: "app_opened", timestamp: iso(at) });
+  }
+  const count = (type: string, n: number) => {
+    for (let i = 0; i < n; i++) push({ event_type: type, timestamp: iso(day + (8 + rand2() * 14) * 3_600_000) });
+  };
+  count("add_reaction", Math.round(rand2() * 4 * a));
+  count("join_voice_channel", rand2() < 0.5 * a + 0.1 ? 1 + Math.round(rand2() * 2) : 0);
+  count("join_call", rand2() < 0.04 ? 1 : 0);
+  count("notification_clicked", Math.round(rand2() * 2 * a));
+  if (day >= RECENT) {
+    count("message_edited", rand2() < 0.3 ? 1 : 0);
+    count("application_command_used", rand2() < 0.2 ? 1 : 0);
   }
 }
 
