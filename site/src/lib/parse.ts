@@ -382,8 +382,9 @@ export async function parsePackage(
 export type Ev = { id: string; t: number; zone: string | null } & (
   | { k: "start" | "end"; session: string | null; os: string }
   | { k: "count"; type: Counted }
-  | { k: "stream"; rec: StreamRec | null }
-  | { k: "voice"; rec: VoiceRec | null; rtc: string | null }
+  | { k: "stream"; rec: StreamRec | null; rtc: string | null }
+  // `streamConn`: connected seconds of a Go Live connection, which has no rec.
+  | { k: "voice"; rec: VoiceRec | null; rtc: string | null; streamConn?: number | null }
 );
 
 function extractEvent(line: string): Ev | null {
@@ -403,7 +404,7 @@ function extractEvent(line: string): Ev | null {
   if ((COUNTED as readonly string[]).includes(type)) return { ...head, k: "count", type: type as Counted };
   if (type === "video_stream_ended") {
     const role = STREAM_ROLES[`${d.context}/${d.participant_type}`];
-    return { ...head, k: "stream", rec: role === undefined ? null : {
+    return { ...head, k: "stream", rtc: d.rtc_connection_id ? String(d.rtc_connection_id) : null, rec: role === undefined ? null : {
       t,
       role,
       sec: num(d.duration),
@@ -416,7 +417,9 @@ function extractEvent(line: string): Ev | null {
   const lv = type === "leave_voice_channel";
   // voice_disconnect also fires for the separate connection Go Live opens
   // (context=stream); counting it would add stream time to voice time.
-  return { ...head, k: "voice", rtc: d.rtc_connection_id ? String(d.rtc_connection_id) : null, rec: !lv && d.context === "stream" ? null : {
+  const rtc = d.rtc_connection_id ? String(d.rtc_connection_id) : null;
+  if (!lv && d.context === "stream") return { ...head, k: "voice", rtc, rec: null, streamConn: secs(d, "duration_connected") };
+  return { ...head, k: "voice", rtc, rec: {
     t,
     src: lv ? "lv" : "vd",
     sec: num(d.duration) / 1000, // milliseconds in both event types
@@ -485,6 +488,8 @@ class EventFolder {
   private ends = new Map<string, number>();
   // rtc_connection_id -> that connection's voice records, checked in finish().
   private calls = new Map<string, VoiceRec[]>();
+  // The same for streams, with the Go Live connection's connected time.
+  private streamCalls = new Map<string, { recs: StreamRec[]; conn: number | null }>();
   private data: PackageData;
   constructor(data: PackageData) {
     this.data = data;
@@ -505,7 +510,12 @@ class EventFolder {
     } else if (ev.k === "count") {
       data.counted[ev.type].push(t);
     } else if (ev.k === "stream") {
-      if (ev.rec) data.streams.push(ev.rec);
+      if (!ev.rec) return;
+      data.streams.push(ev.rec);
+      if (ev.rtc) this.streamCall(ev.rtc).recs.push(ev.rec);
+    } else if (ev.k === "voice" && ev.streamConn != null && ev.rtc) {
+      const call = this.streamCall(ev.rtc);
+      call.conn = Math.max(call.conn ?? 0, ev.streamConn);
     } else if (ev.k === "voice" && ev.rec) {
       data.voice.push(ev.rec);
       if (ev.rtc) {
@@ -514,6 +524,12 @@ class EventFolder {
         else this.calls.set(ev.rtc, [ev.rec]);
       }
     }
+  }
+
+  private streamCall(rtc: string) {
+    let call = this.streamCalls.get(rtc);
+    if (!call) this.streamCalls.set(rtc, (call = { recs: [], conn: null }));
+    return call;
   }
 
   finish() {
@@ -535,6 +551,12 @@ class EventFolder {
       if (!vd) continue;
       const conn = vd.conn!;
       for (const r of recs) r.sec = Math.min(r.sec, conn);
+    }
+    // Streams have the same fault (a "17.6 h" Go Live against 1.1 h on its
+    // own connection), so cut them to their Go Live connection's time too.
+    for (const { recs, conn } of this.streamCalls.values()) {
+      if (conn == null) continue;
+      for (const r of recs) if (r.sec > conn * 1.5 + 600) r.sec = conn;
     }
   }
 }
