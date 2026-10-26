@@ -341,7 +341,10 @@ $<HTMLButtonElement>("#share-download").addEventListener("click", async () => {
 });
 nativeBtn.addEventListener("click", async () => {
   try {
-    await navigator.share({ files: [shareFile(await shareBlob!)] });
+    // The link goes in the text: some apps drop `url` when there's a file.
+    const files = [shareFile(await shareBlob!)];
+    const text = "My Discord, unpacked: https://unpacked.lockhart.in";
+    await navigator.share(navigator.canShare({ files, text }) ? { files, text } : { files });
   } catch {
     // Cancelled from the share sheet.
   }
