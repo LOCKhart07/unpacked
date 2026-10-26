@@ -270,7 +270,12 @@ function findIndex(entries: ZipEntry[], names: Set<string>, marker: string): Zip
   });
 }
 
-export async function parsePackage(zip: Blob, onProgress: (p: Progress) => void = () => {}): Promise<PackageData> {
+// `onAppIds` gets app ids as they're found (played games from user.json, then
+// streamed apps), so their names can be looked up while the rest is read.
+export async function parsePackage(
+  zip: Blob, onProgress: (p: Progress) => void = () => {},
+  onAppIds: (ids: string[], library: Record<string, string>) => void = () => {},
+): Promise<PackageData> {
   onProgress({ phase: "Reading the ZIP", done: 0, total: 1 });
   const entries = await readEntries(zip);
   const names = new Set(entries.map((e) => e.name));
@@ -320,6 +325,7 @@ export async function parsePackage(zip: Blob, onProgress: (p: Progress) => void 
     break;
   }
   if (!data.user) missing.push("Account (user.json): needed for playtime per game and badges.");
+  if (data.games.length) onAppIds(data.games.map((g) => g.id), data.libraryNames);
 
   const servers = findIndex(entries, names, "guild.json");
   if (servers) data.serverNames = JSON.parse(await entryText(zip, servers));
@@ -347,6 +353,7 @@ export async function parsePackage(zip: Blob, onProgress: (p: Progress) => void 
   // Session id -> earliest start / latest end, paired once all files are read.
   const starts = new Map<string, { t: number; os: string }>();
   const ends = new Map<string, number>();
+  const streamApps = new Set<string>(); // passed to onAppIds already
 
   const handle = (line: string) => {
     let d: Record<string, unknown>;
@@ -378,12 +385,17 @@ export async function parsePackage(zip: Blob, onProgress: (p: Progress) => void 
     if (d.event_type === "video_stream_ended") {
       const role = STREAM_ROLES[`${d.context}/${d.participant_type}`];
       if (role === undefined) return;
+      const appId = d.share_application_id ? String(d.share_application_id) : null;
+      if (appId && !streamApps.has(appId)) {
+        streamApps.add(appId);
+        onAppIds([appId], data.libraryNames);
+      }
       data.streams.push({
         t,
         role,
         sec: num(d.duration),
         app: String(d.share_application_name ?? ""),
-        appId: d.share_application_id ? String(d.share_application_id) : null,
+        appId,
         exe: d.share_application_executable ? String(d.share_application_executable).toLowerCase() : null,
         viewers: num(d.max_viewers),
       });
@@ -585,53 +597,64 @@ export interface Apps {
 // `exes`: executable names to identify (streams without an app id). Discord's
 // list gives each app's executables, either as an exact file name (">javaw.exe")
 // or as the end of a path ("minecraft/runtime/.../javaw.exe").
-export async function resolveApps(ids: string[], library: Record<string, string>, exes: string[] = []): Promise<Apps> {
+export type Detectable = {
+  id: string; name: string; icon_hash?: string | null; aliases?: string[];
+  executables?: { name?: string; is_launcher?: boolean }[];
+};
+
+// Discord's list of detectable apps (about 2.5 MB gzipped). Empty if offline or blocked.
+export const fetchDetectable = (): Promise<Detectable[]> =>
+  fetch(`${API}/detectable`, { cache: "force-cache" }).then((r) => r.json(), () => []).catch(() => []);
+
+// Pass `detectable` to reuse a list already being fetched.
+export async function resolveApps(
+  ids: string[], library: Record<string, string>, exes: string[] = [], detectable = fetchDetectable(),
+): Promise<Apps> {
   const names: Record<string, string> = {};
   const icons: Record<string, string> = {};
   const aliases: [string, string][] = [];
   const exeIds: Record<string, string> = {};
   const wanted = new Set(exes);
   const byPath = new Map<string, Set<string>>(); // file name -> apps listing it at the end of a path
-  try {
-    const res = await fetch(`${API}/detectable`, { cache: "force-cache" });
-    type Detectable = {
-      id: string; name: string; icon_hash?: string | null; aliases?: string[];
-      executables?: { name?: string; is_launcher?: boolean }[];
-    };
-    for (const a of (await res.json()) as Detectable[]) {
-      names[a.id] = a.name;
-      if (a.icon_hash) icons[a.id] = a.icon_hash;
-      for (const alias of a.aliases ?? []) aliases.push([alias, a.id]);
-      for (const e of a.executables ?? []) {
-        if (!e.name || e.is_launcher) continue;
-        const exe = e.name.toLowerCase();
-        if (exe.startsWith(">")) {
-          if (wanted.has(exe.slice(1))) exeIds[exe.slice(1)] ??= a.id;
-        } else {
-          const file = exe.slice(exe.lastIndexOf("/") + 1);
-          if (wanted.has(file)) byPath.set(file, (byPath.get(file) ?? new Set()).add(a.id));
-        }
+  // Offline or blocked, the list is empty: fall through to the library names and lookups.
+  for (const a of await detectable) {
+    names[a.id] = a.name;
+    if (a.icon_hash) icons[a.id] = a.icon_hash;
+    for (const alias of a.aliases ?? []) aliases.push([alias, a.id]);
+    for (const e of a.executables ?? []) {
+      if (!e.name || e.is_launcher) continue;
+      const exe = e.name.toLowerCase();
+      if (exe.startsWith(">")) {
+        if (wanted.has(exe.slice(1))) exeIds[exe.slice(1)] ??= a.id;
+      } else {
+        const file = exe.slice(exe.lastIndexOf("/") + 1);
+        if (wanted.has(file)) byPath.set(file, (byPath.get(file) ?? new Set()).add(a.id));
       }
     }
-    // A file name only found inside paths counts if a single app has it.
-    for (const [file, apps] of byPath) if (!exeIds[file] && apps.size === 1) exeIds[file] = [...apps][0];
-  } catch {
-    // Offline or blocked: fall through to the library names and lookups.
   }
+  // A file name only found inside paths counts if a single app has it.
+  for (const [file, apps] of byPath) if (!exeIds[file] && apps.size === 1) exeIds[file] = [...apps][0];
   for (const [id, n] of Object.entries(library)) names[id] ??= n;
 
   // Old ids missing from the detectable list (Minecraft, GTA V and CS:GO among them).
-  const todo = ids.filter((id) => !names[id]);
-  const worker = async () => {
-    for (let id = todo.pop(); id; id = todo.pop()) {
-      const app = await rpcLookup(id);
-      if (!app) continue;
-      names[id] = app.name;
-      if (app.icon) icons[id] = app.icon;
-    }
-  };
-  await Promise.all([worker(), worker()]);
+  await Promise.all(ids.filter((id) => !names[id]).map(async (id) => {
+    const app = await rpcLookup(id);
+    if (!app) return;
+    names[id] = app.name;
+    if (app.icon) icons[id] = app.icon;
+  }));
   return { names, icons, aliases, exeIds };
+}
+
+// Starts looking up apps missing from Discord's list as soon as their ids are
+// known, while the package is still being read; resolveApps then finds the
+// answers ready.
+const listed = new WeakMap<Detectable[], Set<string>>();
+export function prefetchApps(ids: string[], library: Record<string, string>, detectable: Promise<Detectable[]>) {
+  detectable.then((list) => {
+    if (!listed.has(list)) listed.set(list, new Set(list.map((a) => a.id)));
+    for (const id of ids) if (!listed.get(list)!.has(id) && !library[id]) rpcLookup(id);
+  });
 }
 
 // One app's public info. Retries rate limits and network errors with backoff,
@@ -639,7 +662,30 @@ export async function resolveApps(ids: string[], library: Record<string, string>
 // (repeated loads are what get rate-limited). Returns null if it can't be named.
 const RPC_CACHE = "app-rpc-v1";
 
-async function rpcLookup(id: string): Promise<{ name: string; icon?: string | null } | null> {
+type RpcApp = { name: string; icon?: string | null };
+// Each id is asked once (also kept in memory: prefetchApps and resolveApps
+// both ask, and Cache Storage can be off), two at a time to stay under the
+// rate limit.
+const rpcAsked = new Map<string, Promise<RpcApp | null>>();
+let rpcFree = 2;
+const rpcWaiting: (() => void)[] = [];
+function rpcLookup(id: string): Promise<RpcApp | null> {
+  if (!rpcAsked.has(id)) rpcAsked.set(id, (async () => {
+    while (!rpcFree) await new Promise<void>((r) => rpcWaiting.push(r));
+    rpcFree--;
+    try {
+      return await rpcFetch(id);
+    } catch {
+      return null;
+    } finally {
+      rpcFree++;
+      rpcWaiting.shift()?.();
+    }
+  })());
+  return rpcAsked.get(id)!;
+}
+
+async function rpcFetch(id: string): Promise<RpcApp | null> {
   const url = `${API}/${id}/rpc`;
   const cache = typeof caches === "undefined" ? null : await caches.open(RPC_CACHE).catch(() => null);
   const hit = await cache?.match(url);
