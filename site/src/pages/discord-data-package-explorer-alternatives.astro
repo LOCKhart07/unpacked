@@ -1,0 +1,100 @@
+---
+import Base from "../layouts/Base.astro";
+
+// From docs/FEATURES.md in the repo: each tool's site, code and issue
+// tracker, checked in October 2026. Keep it fair, and update the date when
+// rechecking.
+const CHECKED = "October 2026";
+const YES = "Yes", NO = "No";
+const tools = ["Unpacked", "Discord Data Package Explorer", "Discord Package", "Dumpus"];
+const rows: [string, string, string, string, string][] = [
+  ["Where your package is processed", "Your browser", "Your browser", "Your browser", "Their server (you paste the download link)"],
+  ["Open source", "Yes (GPL-3.0)", "Yes (GPL-3.0)", "Yes (GPL-3.0)", "App yes, server code has no licence"],
+  ["Playtime per game", YES, NO, NO, NO],
+  ["Go Live and stream watch time", YES, NO, NO, NO],
+  ["Time in voice", YES, NO, NO, YES],
+  ["Talking vs listening in voice", YES, NO, NO, NO],
+  ["Time with Discord open", YES, NO, NO, YES],
+  ["Lifetime totals vs Discord's profile badges", YES, NO, NO, NO],
+  ["Activity stats from packages exported in 2026", YES, "No (looks for an old folder)", "No (looks for an old folder)", "Not checked"],
+  ["Message stats, top DMs, servers and channels", YES, YES, YES, YES],
+  ["Favourite words and emoji", YES, "Words", YES, NO],
+  ["Year and recent-months filters", YES, NO, NO, YES],
+  ["Money spent, connections, profile", YES, "Money, profile", YES, "Money, profile"],
+  ["Shareable image", YES, NO, NO, YES],
+  ["Sample data to try it", YES, YES, YES, YES],
+];
+---
+
+<Base
+  title="Discord Data Package Explorer alternatives compared (2026) · Unpacked"
+  description="Discord data package viewers compared: Unpacked, Discord Data Package Explorer (DDPE), Discord Package and Dumpus. What each one shows, where your data goes, and which work with 2026 packages."
+>
+  <article class="wrap prose wide">
+    <h1>Discord data package viewers compared</h1>
+    <p class="muted">
+      Four free tools turn the <code>package.zip</code> Discord sends you into stats: Unpacked (this site),
+      Discord Data Package Explorer (DDPE), Discord Package and Dumpus. They differ in what they show and in where your
+      data goes. Checked in {CHECKED}, from each tool's site, code and issue tracker.
+    </p>
+
+    <div class="compare-scroll">
+      <table class="compare">
+        <thead><tr><th></th>{tools.map((t) => <th>{t}</th>)}</tr></thead>
+        <tbody>
+          {rows.map(([feature, ...cells]) => (
+            <tr>
+              <th scope="row">{feature}</th>
+              {cells.map((c) => <td class={c === YES ? "yes" : c === NO ? "no" : ""}>{c}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+
+    <h2>Why the older explorers miss activity stats</h2>
+    <p>
+      Packages used to keep the activity log in <code>Activity/analytics/</code>. Packages exported now split it
+      across <code>Activity/modeling/</code>, <code>reporting/</code> and <code>tns/</code> instead, with no
+      <code>analytics/</code> folder. Discord Data Package Explorer and Discord Package only look for the old folder,
+      so with a new package their activity-based numbers (app opens, voice joins, event counts) come up empty.
+      Unpacked reads all three new folders and removes the events they share.
+    </p>
+
+    <h2>Uploading vs reading in the browser</h2>
+    <p>
+      Dumpus asks for your package's download link; its server downloads the package, processes it and stores the
+      results encrypted. That works well on a phone. The other three never send the package anywhere: the page reads
+      the ZIP in your browser tab. Unpacked also blocks itself from talking to anything except Discord's public game
+      list and icons, so the promise is enforced by the browser, not just stated.
+    </p>
+
+    <h2>Which one to use</h2>
+    <ul>
+      <li><strong>Playtime, Go Live, voice and time on Discord:</strong> Unpacked is the only one that shows playtime and streaming.</li>
+      <li><strong>Lots of message trivia</strong> (swear words, links, invites, mentions): Discord Package has the most.</li>
+      <li><strong>On your phone, without downloading the ZIP:</strong> Dumpus, if you're fine with a server processing it.</li>
+    </ul>
+
+    <p>
+      <a class="button" href="/stats/">Open your package</a>{" "}
+      <a class="button ghost" href="/stats/?demo">Try with sample data</a>
+    </p>
+    <p class="muted small">
+      Something here out of date? <a href="https://github.com/LOCKhart07/unpacked/issues/new/choose" target="_blank" rel="noopener">Tell us on GitHub</a>.
+    </p>
+  </article>
+</Base>
+
+<style>
+  .wide { max-width: 1000px; }
+  .compare-scroll { overflow-x: auto; margin-block: 20px 28px; }
+  .compare { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+  .compare th, .compare td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+  .compare thead th { font-size: 0.85rem; color: var(--muted); }
+  .compare thead th:nth-child(2) { color: var(--accent-2); }
+  .compare tbody th { font-weight: 500; }
+  .compare td:nth-child(2) { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+  .compare .yes { color: var(--good); font-weight: 600; }
+  .compare .no { color: var(--muted); }
+</style>

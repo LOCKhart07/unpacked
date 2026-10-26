@@ -3,6 +3,10 @@ import Base from "../layouts/Base.astro";
 
 const faq = [
   {
+    q: "What is Unpacked?",
+    a: "A free, open-source Discord data package viewer and analyzer. You open the package.zip Discord sends you, and it turns it into charts and stats: playtime per game, Go Live and voice time, messages, time with Discord open, your account and what you've spent. It's like Discord Wrapped, for your whole account history.",
+  },
+  {
     q: "Is my Discord data uploaded anywhere?",
     a: "No. The page reads your package.zip inside your browser tab and never sends it anywhere. The only network requests are to Discord's public list of games and its game icons, to show your games' names and pictures.",
   },
@@ -18,21 +22,50 @@ const faq = [
     q: "Can I see playtime for a single year?",
     a: "Not for games: the package only has one lifetime total per game. Streaming, camera and voice time come from dated events, so those can be shown for any year or the last 30 days, 6 months or 12 months.",
   },
+  {
+    q: "How is it different from Discord Data Package Explorer, Discord Package or Dumpus?",
+    a: "It shows things they don't: playtime per game, Go Live and watch time, talking vs listening in voice, and how your lifetime totals compare with your badges. It also reads the activity data in packages exported in 2026, which the older explorers look for in a folder new packages no longer have. And unlike Dumpus, nothing is sent to a server.",
+  },
+  {
+    q: "Is it free?",
+    a: "Yes. There's no account, no ads and no upload. The code is on GitHub under the GPL-3.0 licence.",
+  },
 ];
 
 const jsonLd = {
   "@context": "https://schema.org",
-  "@type": "FAQPage",
-  mainEntity: faq.map(({ q, a }) => ({ "@type": "Question", name: q, acceptedAnswer: { "@type": "Answer", text: a } })),
+  "@graph": [
+    {
+      "@type": "WebApplication",
+      name: "Unpacked",
+      url: "https://unpacked.lockhart.in/",
+      description: "Free Discord data package viewer, analyzer and visualizer that runs in your browser.",
+      applicationCategory: "UtilitiesApplication",
+      operatingSystem: "Any (web browser)",
+      browserRequirements: "Requires JavaScript",
+      isAccessibleForFree: true,
+      offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+      featureList: [
+        "Playtime per game", "Go Live and stream watch time", "Voice time, talking vs listening",
+        "Message stats, top DMs, servers and channels", "Time with Discord open", "Account, connections and money spent",
+        "Shareable stats image", "Runs in the browser; nothing is uploaded",
+      ],
+    },
+    {
+      "@type": "FAQPage",
+      mainEntity: faq.map(({ q, a }) => ({ "@type": "Question", name: q, acceptedAnswer: { "@type": "Answer", text: a } })),
+    },
+  ],
 };
 ---
 
 <Base
-  title="Unpacked: your Discord playtime, Go Live and voice time, from your data package"
-  description="See how many hours you've played each game, streamed with Go Live, watched streams and talked in voice, from your Discord data package. Runs in your browser; nothing is uploaded."
+  title="Unpacked: Discord data package viewer and analyzer"
+  description="Free Discord data package viewer, analyzer and visualizer. Open your package.zip to see playtime per game, Go Live and voice time, messages, time on Discord and more. Runs in your browser; nothing is uploaded."
 >
   <div class="wrap">
     <section class="hero">
+      <p class="kicker">Discord data package viewer and analyzer</p>
       <h1>Every hour you've spent on Discord, from your own data.</h1>
       <p class="lead muted">
         Playtime per game, Go Live and watch time, how much you talk in voice, and how your lifetime totals compare with
@@ -63,17 +96,36 @@ const jsonLd = {
         <p class="muted">How much you've sent, to whom and where, when you're most active, your favourite words and emoji.</p>
       </div>
       <div class="card">
-        <h2>Any time range</h2>
-        <p class="muted">Lifetime, the last 30 days, 6 or 12 months, or a single year, plus how your badges line up.</p>
+        <h2>Time on Discord</h2>
+        <p class="muted">Hours with Discord open, sessions per device, and how often you open the app, react, join voice and more.</p>
+      </div>
+      <div class="card">
+        <h2>Account and spending</h2>
+        <p class="muted">Your profile, badges, friends, connected accounts, signed-in devices, and everything you've paid for.</p>
+      </div>
+      <div class="card">
+        <h2>Any time range, shareable</h2>
+        <p class="muted">Lifetime, the last 30 days, 6 or 12 months, or a single year, in your time zone. Share any of it as an image.</p>
       </div>
     </section>
 
     <section class="card private">
       <h2>Your package never leaves your computer</h2>
       <p class="muted">
-        Other tools ask you to upload your data or paste a download link to their server. This one reads the ZIP in
-        your browser tab. The results stay in your browser so you don't have to open the ZIP again, until you click
+        Some tools ask you to paste your package's download link so their server can fetch it. This one reads the ZIP
+        in your browser tab. The results stay in your browser so you don't have to open the ZIP again, until you click
         Forget. The code is open source, so you can check.
+      </p>
+    </section>
+
+    <section class="prose">
+      <h2>See your Discord data, not just download it</h2>
+      <p class="muted">
+        Discord's data package is a ZIP of JSON files and multi-gigabyte event logs, not something you can read. Unpacked
+        is a Discord data visualizer for it: it finds the parts that matter, works out the totals, and draws them as
+        charts you can filter by year. It handles packages exported in 2026, in any language, and big ones too.
+        Coming from another tool? Here's <a href="/discord-data-package-explorer-alternatives/">how the Discord data
+        package viewers compare</a>.
       </p>
     </section>
 

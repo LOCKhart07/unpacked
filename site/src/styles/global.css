@@ -86,3 +86,4 @@ main { padding-block: 40px 80px; }
 .prose { max-width: 720px; }
 .prose li { margin-bottom: 0.4em; }
 .prose code { background: var(--surface-2); padding: 0.1em 0.35em; border-radius: 6px; }
+.kicker { margin: 0 0 8px; color: var(--accent-2); font-weight: 600; font-size: 0.9rem; letter-spacing: 0.06em; text-transform: uppercase; }
