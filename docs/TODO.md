@@ -18,6 +18,10 @@ Not in priority order, and none of it has to land at once. The full feature list
 - [x] **Emoji use:** top emojis, including custom server emojis.
 - [ ] **Stopwords for other languages.** Only English filler words are left out, so Hinglish chat gives "nai", "hai", "kai" as top words. Add lists for common languages (Hinglish, Spanish, French, German, Portuguese...).
 - [x] **Show custom emoji images** (`cdn.discordapp.com/emojis/<id>.webp`, lazy and 64 px); a deleted emoji falls back to its `:name:`.
+- [ ] **Playtime by year.** `application_closed` events date each game session (`activity_duration_s`, from 2019 on), so the Games tab could get a playtime-over-time chart and the range chips. Label it as its own partial source: it sums to about 2,800 h against 3,473 h in `user_activity_application_statistics`, and it misses games Discord didn't detect (no VALORANT before 2023).
+- [ ] **Ad profile** from `Ads/traits.json`: age group, region, games targeted on (last 30 / 90 / 365 / 730 days, IDs to name via the app list), game themes, music and mobile genres, named custom audiences (`mobile_install_*`), quests joined, ad ID state. Explain each field in plain words, and leave out bare audience IDs and the unnamed `genre_ids`. Probably on the Account tab.
+- [ ] **Servers you read but don't talk in.** `channel_opened` (51k events with `channel_id`) against messages sent: most opened channels and a lurker ratio per server.
+- [ ] **Avatar history** from `Account/recent_avatars/` (6 images), as a small gallery.
 - [ ] **Everything else from the reference sites** (DDPE, Discord Package, Dumpus). See the checklist in [FEATURES.md](FEATURES.md) for what's left. (Done: Account tab; Activity tab with time on Discord and event counts.)
 
 ## SEO
