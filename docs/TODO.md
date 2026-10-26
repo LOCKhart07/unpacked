@@ -29,6 +29,6 @@ Not in priority order, and none of it has to land at once. The full feature list
 ## Loose ends
 
 - [x] **Make the repo public.** Public since 2026-10-26, with the live site link, screenshots from a made-up demo package, and issue forms for feedback.
-- [ ] **Timezones:** streaming and voice daily / yearly totals use UTC; the message hour and weekday charts use the viewer's browser timezone. Use each event's `time_zone` and let people override it.
+- [x] **Timezones:** streaming and voice daily / yearly totals use UTC; the message hour and weekday charts use the viewer's browser timezone. Use each event's `time_zone` and let people override it.
 - [ ] **Accept an extracted folder,** not just the ZIP.
 - [ ] **Turn off the Netlify toolbar** in the Netlify project settings. Its injected inline script shows up as a CSP error in the console.

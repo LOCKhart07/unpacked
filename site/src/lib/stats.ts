@@ -1,7 +1,17 @@
 // Turns parsed records into the numbers the page shows, for a time range.
-// Pure functions: used by the page and by scripts/check.ts.
+// Pure functions apart from the timezone: used by the page and by scripts/check.ts.
 
 import type { Apps, GameStat, MessageRec, PackageData, StreamRec, VoiceRec } from "./parse.ts";
+import { makeZone, type Zone } from "./zone.ts";
+
+// Days, months, years and hours are counted in this zone. One zone for
+// everything, not each event's own: messages have none, and a trip abroad
+// would otherwise split one evening across two days.
+let zone: Zone = makeZone("UTC");
+export const setTimeZone = (name: string) => { zone = makeZone(name); };
+export const timeZone = () => zone.name;
+// "2026-10-20" in the current zone.
+export const localDate = (t: number) => new Date(zone.local(t)).toISOString().slice(0, 10);
 
 export interface Range {
   from: number; // epoch ms, inclusive
@@ -29,8 +39,8 @@ export function ranges(data: PackageData): Range[] {
   const end = data.lastEvent + 1;
   const { first } = dataSpan(data);
   const years: Range[] = [];
-  for (let y = new Date(end).getUTCFullYear(); y >= new Date(first).getUTCFullYear(); y--) {
-    years.push({ from: Date.UTC(y, 0, 1), to: Date.UTC(y + 1, 0, 1), label: String(y) });
+  for (let y = year(end - 1); y >= year(first); y--) {
+    years.push({ from: zone.fromLocal(y, 0), to: zone.fromLocal(y + 1, 0), label: String(y) });
   }
   return [
     LIFETIME,
@@ -42,8 +52,8 @@ export function ranges(data: PackageData): Range[] {
 }
 
 const inRange = (r: Range) => (x: { t: number }) => x.t >= r.from && x.t < r.to;
-const year = (t: number) => new Date(t).getUTCFullYear();
-const month = (t: number) => new Date(t).toISOString().slice(0, 7);
+const year = (t: number) => new Date(zone.local(t)).getUTCFullYear();
+const month = (t: number) => new Date(zone.local(t)).toISOString().slice(0, 7);
 
 function sortedTotals(m: Map<string, number>, n = Infinity): [string, number][] {
   return [...m].sort((a, b) => b[1] - a[1]).slice(0, n);
@@ -64,13 +74,16 @@ function buckets(range: Range, first: number, last: number) {
   const unit: Series["unit"] = end - start <= 92 * DAY ? "day" : "month";
   const len = unit === "day" ? 10 : 7;
   const keys = new Map<string, number>();
-  const step = new Date(unit === "day" ? start : Date.UTC(new Date(start).getUTCFullYear(), new Date(start).getUTCMonth(), 1));
-  while (step.getTime() < end) {
+  // Walks local dates: `step` is local time stored as if it were UTC.
+  const s = new Date(zone.local(start));
+  const step = unit === "day" ? s : new Date(Date.UTC(s.getUTCFullYear(), s.getUTCMonth(), 1));
+  const stop = zone.local(end);
+  while (step.getTime() < stop) {
     keys.set(step.toISOString().slice(0, len), 0);
     if (unit === "day") step.setUTCDate(step.getUTCDate() + 1);
     else step.setUTCMonth(step.getUTCMonth() + 1);
   }
-  return { unit, keys, start, end, key: (t: number) => new Date(t).toISOString().slice(0, len) };
+  return { unit, keys, start, end, key: (t: number) => new Date(zone.local(t)).toISOString().slice(0, len) };
 }
 
 // First and last time in a list (a loop: spreading 100k+ items into Math.min overflows the stack).
@@ -322,7 +335,7 @@ export interface MessageStats {
   channels: [string, number][];
   servers: [string, number][];
   series: Series;
-  hours: number[]; // 0-23, viewer's local time
+  hours: number[]; // 0-23, in the current zone
   weekdays: number[]; // 0 = Monday
   words: [string, number][];
   emojis: [string, number][];
@@ -345,10 +358,10 @@ export function messages(data: Pick<PackageData, "messages" | "channels">, range
     byChannel.set(m.c, (byChannel.get(m.c) ?? 0) + 1);
     const server = ch[m.c].server;
     if (ch[m.c].kind === "server" && server) add(servers, server, 1);
-    const d = new Date(m.t);
-    days.add(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`); // local days, like the hour chart
-    hours[d.getHours()]++;
-    weekdays[(d.getDay() + 6) % 7]++;
+    const d = new Date(zone.local(m.t));
+    days.add(d.toISOString().slice(0, 10));
+    hours[d.getUTCHours()]++;
+    weekdays[(d.getUTCDay() + 6) % 7]++;
     chars += m.text.length;
     if (m.att) attachments++;
     if (!first || m.t < first.t) first = m;

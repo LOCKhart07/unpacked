@@ -134,7 +134,10 @@ const GROUPS = [{ id: "800000000000000001", name: "weekend squad" }, { id: "8000
 // ---- Activity events ---------------------------------------------------------
 
 const events: string[] = [];
-const push = (e: Record<string, unknown>) => events.push(JSON.stringify({ event_id: eventId(), ...e }));
+// Mostly home, with the odd trip, like a real package. Not from rand(), so
+// adding it didn't change the rest of the made-up data.
+const zoneOf = () => (events.length % 40 === 39 ? "Europe/London" : "America/New_York");
+const push = (e: Record<string, unknown>) => events.push(JSON.stringify({ event_id: eventId(), time_zone: zoneOf(), ...e }));
 const STREAMED = GAMES.slice(0, 14);
 
 for (let day = START; day < END; day += DAY) {

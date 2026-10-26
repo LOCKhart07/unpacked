@@ -4,12 +4,13 @@
 import { appIcon, type Apps, type PackageData } from "./parse.ts";
 import {
   BADGE_START, LIFETIME, SCREEN_SHARE, STREAM_ROLE_LABELS, badges, canonName, dataSpan, gameIcon, hours, idsByName, messages, pct, playtime,
-  ranges, streamNamer, streams, voice,
+  localDate, ranges, setTimeZone, streamNamer, streams, timeZone, voice,
   type MessageStats, type Range, type Series,
 } from "./stats.ts";
 import { forgetPackage, loadPackage, savePackage } from "./saved.ts";
 import { cardBlob, drawCard, type CardData } from "./share-card.ts";
 import { wordCloud } from "./wordcloud.ts";
+import { allZones, browserZone, makeZone } from "./zone.ts";
 import type { WorkerMessage } from "./worker.ts";
 // The built worker's URL has a content hash, which changes whenever the parser
 // does, so it also says whether saved results came from this parser.
@@ -254,7 +255,23 @@ function lead(label: string, value: string, lines: string[]) {
     ${lines.filter(Boolean).map((l) => `<div class="lead-line">${l}</div>`).join("")}</div>`;
 }
 
-const date = (t: number) => new Date(t).toISOString().slice(0, 10);
+const date = localDate;
+
+// The zone picked in the picker, kept for next time (only in this browser).
+const ZONE_KEY = "unpacked-time-zone";
+const validZone = (z: string | null | undefined) => {
+  try {
+    return z ? (makeZone(z), z) : null;
+  } catch {
+    return null; // not a zone this browser knows
+  }
+};
+const storedZone = () => {
+  try { return localStorage.getItem(ZONE_KEY); } catch { return null; }
+};
+const storeZone = (z: string | null) => {
+  try { z ? localStorage.setItem(ZONE_KEY, z) : localStorage.removeItem(ZONE_KEY); } catch {}
+};
 
 // ---- Tabs ----------------------------------------------------------------
 // One tab per topic. Only tabs whose data has dates get the range chips; the
@@ -353,7 +370,11 @@ nativeBtn.addEventListener("click", async () => {
 function render(data: PackageData, apps: Apps) {
   const { names, icons, aliases } = apps;
   const streamName = streamNamer(apps);
-  const all = ranges(data);
+  // The package's own zone: where most of its events were sent from.
+  const packageZones = data.timeZones.filter((z) => validZone(z));
+  const defaultZone = packageZones[0] ?? browserZone();
+  setTimeZone(validZone(storedZone()) ?? defaultZone);
+  let all = ranges(data);
   const play = playtime(data.games, names);
   const badgeRows = badges(data, names);
   const span = dataSpan(data);
@@ -412,6 +433,19 @@ function render(data: PackageData, apps: Apps) {
     };
   };
   share = { ranges: all, card: cardFor };
+
+  // The package's zones first (the most used is the default), then the rest.
+  const zonePicker = () => {
+    const current = timeZone();
+    const opt = (z: string, note = "") => `<option value="${esc(z)}"${z === current ? " selected" : ""}>${esc(z)}${note}</option>`;
+    const mine = packageZones.length ? packageZones : [defaultZone];
+    const rest = allZones().filter((z) => !mine.includes(z));
+    return `<select id="zone">
+      <optgroup label="${packageZones.length ? "From your package" : "Your browser"}">${mine.map((z) =>
+        opt(z, z === defaultZone ? " (default)" : "")).join("")}</optgroup>
+      <optgroup label="All time zones">${rest.map((z) => opt(z)).join("")}</optgroup>
+    </select>`;
+  };
 
   const overview = () => {
     const s = streams(data.streams, LIFETIME, streamName);
@@ -544,7 +578,7 @@ function render(data: PackageData, apps: Apps) {
     const m = messagesFor(range);
     if (!m.count) return `<p class="muted">No messages in this range.</p>`;
     const busiest = m.hours.indexOf(Math.max(...m.hours));
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const tz = timeZone();
     const peak = peakOf(m.series);
     return `
       <div class="tiles">
@@ -629,6 +663,7 @@ function render(data: PackageData, apps: Apps) {
           <p class="eyebrow">Your Discord, unpacked</p>
           <h1>${esc(who)}</h1>
           <p class="muted">${span.last ? `Data from ${strong(date(span.first))} to ${strong(date(span.last))}.` : ""} Nothing left your browser.</p>
+          <p class="muted small zone-line"><label>Dates and times in ${zonePicker()}</label></p>
           ${savedAt ? `<p class="muted small saved">Saved in this browser on ${esc(date(savedAt))}, so it's here when you come back.
             <button class="link" id="forget">Forget it</button></p>` : ""}
         </div>
@@ -664,6 +699,17 @@ function render(data: PackageData, apps: Apps) {
         range = all[Number(c.dataset.i)];
         draw();
       }));
+    $<HTMLSelectElement>("#zone").addEventListener("change", (e) => {
+      const z = (e.target as HTMLSelectElement).value;
+      storeZone(z === defaultZone ? null : z);
+      setTimeZone(z);
+      // Year ranges and every per-day count move with the zone.
+      all = ranges(data);
+      range = all.find((r) => r.label === range.label) ?? LIFETIME;
+      messageCache.clear();
+      share = { ranges: all, card: cardFor };
+      draw();
+    });
     // The card starts on the range the viewer is looking at.
     $<HTMLButtonElement>("#share-open").addEventListener("click", () => openShare(ranged ? range : LIFETIME));
     document.querySelector("#forget")?.addEventListener("click", async () => {

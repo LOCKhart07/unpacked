@@ -72,6 +72,7 @@ export interface PackageData {
   serverNames: Record<string, string>;
   channelNames: Record<string, string>;
   lastEvent: number; // latest event time, about when the package was exported
+  timeZones: string[]; // the events' time_zone values, most used first
   missing: string[]; // human-readable notes on sections not found
 }
 
@@ -147,6 +148,7 @@ export async function parsePackage(zip: Blob, onProgress: (p: Progress) => void 
     serverNames: {},
     channelNames: {},
     lastEvent: 0,
+    timeZones: [],
     missing,
   };
 
@@ -189,6 +191,7 @@ export async function parsePackage(zip: Blob, onProgress: (p: Progress) => void 
   const total = eventFiles.reduce((s, e) => s + e.size, 0);
   let done = 0;
   const seen = new Set<string>();
+  const zones = new Map<string, number>();
 
   const handle = (line: string) => {
     let d: Record<string, unknown>;
@@ -203,6 +206,7 @@ export async function parsePackage(zip: Blob, onProgress: (p: Progress) => void 
     const t = eventTime(d);
     if (!Number.isFinite(t)) return;
     if (t > data.lastEvent) data.lastEvent = t;
+    if (typeof d.time_zone === "string" && d.time_zone) zones.set(d.time_zone, (zones.get(d.time_zone) ?? 0) + 1);
 
     if (d.event_type === "video_stream_ended") {
       const role = STREAM_ROLES[`${d.context}/${d.participant_type}`];
@@ -271,6 +275,7 @@ export async function parsePackage(zip: Blob, onProgress: (p: Progress) => void 
       }
     }
   }
+  data.timeZones = [...zones].sort((a, b) => b[1] - a[1]).map(([z]) => z);
 
   return data;
 }
