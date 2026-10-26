@@ -326,6 +326,16 @@ function age(t: number) {
     : `${Math.max(1, Math.round(years * 12))} months`;
 }
 
+// "3 days after you made your account", for the oldest message.
+function afterJoining(created: number, t: number) {
+  const days = Math.floor((t - created) / DAY);
+  if (days < 1) return "the same day you made your account";
+  const span = days < 60 ? `${days} ${days === 1 ? "day" : "days"}`
+    : days < 730 ? `${Math.round(days / 30.44)} months`
+    : `${Math.floor(days / 365.25)} years`;
+  return `${span} after you made your account`;
+}
+
 const FLAG_LABELS: Record<string, string> = {
   STAFF: "Discord Staff", PARTNER: "Partnered Server Owner", HYPESQUAD: "HypeSquad Events",
   BUG_HUNTER_LEVEL_1: "Bug Hunter", BUG_HUNTER_LEVEL_2: "Gold Bug Hunter",
@@ -700,9 +710,11 @@ function render(data: PackageData, apps: Apps) {
           : `<p class="muted">No emoji in this range.</p>`}
       </section>
       ${m.first ? `<section class="card">
-        <h3>Oldest message ${range === LIFETIME ? "in the package" : "in this range"}</h3>
+        <h3>Your oldest message${range === LIFETIME ? "" : " in this range"}</h3>
         <blockquote class="quote">${esc(m.first.text.slice(0, 280)) || `<span class="muted">(attachment only)</span>`}
           <footer class="muted small">${esc(date(m.first.t))} · ${esc(m.first.where)}</footer></blockquote>
+        <p class="muted small">${range === LIFETIME && data.user
+          ? `Sent ${esc(afterJoining(snowflakeTime(data.user.id), m.first.t))}. ` : ""}Messages you deleted aren't in the package.</p>
       </section>` : ""}`;
   };
 
