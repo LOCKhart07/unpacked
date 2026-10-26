@@ -44,9 +44,16 @@ const ISSUES = "https://github.com/LOCKhart07/unpacked/issues/new";
 let lastPhase = "";
 let fileSize = 0;
 
+// Errors can quote the package: JSON.parse quotes the text it choked on, and
+// ZIP errors name the file, whose path has channel and server ids.
+const scrub = (error: string) =>
+  error.replace(/"[^"]*"/g, '"…"').replace(/'[^']*'/g, "'…'").replace(/\d{15,}/g, "<id>");
+
 // A GitHub issue link with the bug report form filled in. Only the error, the
-// step and the browser go in: nothing from the package itself.
-function reportUrl(error: string) {
+// step and the browser go in: nothing from the package itself. GitHub sees the
+// link as soon as it's opened, so the error is scrubbed first.
+function reportUrl(raw: string) {
+  const error = scrub(raw);
   const q = new URLSearchParams({
     template: "bug_report.yml",
     title: `Couldn't read package: ${error.slice(0, 80)}`,
@@ -64,7 +71,7 @@ function fail(message: string, error?: string) {
   worker = null;
   errorBox.innerHTML = `${esc(message)}${error === undefined ? "" : `
     <br><a href="${esc(reportUrl(error))}" target="_blank" rel="noopener">Report this bug on GitHub</a>
-    <span class="muted small">(opens a form with the error and your browser filled in; nothing is sent until you submit it)</span>`}`;
+    <span class="muted small">(opens a form with the error and your browser filled in, nothing from your package; no issue is made until you submit it)</span>`}`;
   errorBox.hidden = false;
   show("drop");
 }
@@ -73,6 +80,9 @@ function fail(message: string, error?: string) {
 let demo = false;
 // When the results shown are saved in this browser (never for the sample).
 let savedAt: number | null = null;
+// A package just read and not saved yet. Saving is opt-in: the saved copy has
+// every message, so on a shared computer the next person would see it.
+let unsaved: { data: PackageData; apps: Apps } | null = null;
 
 function start(file: File, isDemo = false) {
   errorBox.hidden = true;
@@ -102,15 +112,8 @@ function start(file: File, isDemo = false) {
       worker?.terminate();
       worker = null;
       savedAt = null;
+      unsaved = isDemo ? null : { data: m.data, apps: m.apps };
       render(m.data, m.apps);
-      if (!isDemo) {
-        const now = Date.now();
-        savePackage({ version: workerUrl, data: m.data, apps: m.apps, savedAt: now }).then((ok) => {
-          if (!ok) return;
-          savedAt = now;
-          redraw?.();
-        });
-      }
     }
   };
   worker.onerror = (e) => fail(`Something went wrong while reading the package: ${e.message}`, e.message);
@@ -149,6 +152,7 @@ else {
     if (!s || worker || !results.hidden) return;
     demo = false;
     savedAt = s.savedAt;
+    unsaved = null;
     render(s.data, s.apps);
   });
 }
@@ -866,7 +870,9 @@ function render(data: PackageData, apps: Apps) {
           <p class="muted">${span.last ? `Data from ${strong(date(span.first))} to ${strong(date(span.last))}.` : ""} Nothing left your browser.</p>
           <p class="muted small zone-line"><label>Dates and times in ${zonePicker()}</label></p>
           ${savedAt ? `<p class="muted small saved">Saved in this browser on ${esc(date(savedAt))}, so it's here when you come back.
-            <button class="link" id="forget">Forget it</button></p>` : ""}
+            <button class="link" id="forget">Forget it</button></p>`
+            : unsaved ? `<p class="muted small saved">Not saved, so it's gone when you leave this page.
+            <button class="link" id="keep">Keep it in this browser</button> (not on a shared computer)</p>` : ""}
         </div>
         <div class="head-actions">
           <button class="button small" id="share-open">Share image</button>
@@ -916,6 +922,17 @@ function render(data: PackageData, apps: Apps) {
     });
     // The card starts on the range the viewer is looking at.
     $<HTMLButtonElement>("#share-open").addEventListener("click", () => openShare(ranged ? range : LIFETIME));
+    document.querySelector<HTMLButtonElement>("#keep")?.addEventListener("click", async (e) => {
+      if (!unsaved) return;
+      const now = Date.now();
+      if (await savePackage({ version: workerUrl, ...unsaved, savedAt: now })) {
+        savedAt = now;
+        unsaved = null;
+        draw();
+      } else {
+        (e.target as HTMLButtonElement).replaceWith("Couldn't save in this browser (private window or blocked site data?).");
+      }
+    });
     document.querySelector("#forget")?.addEventListener("click", async () => {
       await forgetPackage();
       savedAt = null;

@@ -1,6 +1,6 @@
-// Keeps the last opened package's parsed results in IndexedDB, so reloading
-// /stats/ shows them again without choosing the ZIP. Only this browser can
-// read them; "Forget" deletes them.
+// Keeps a package's parsed results in IndexedDB when asked ("Keep it in this
+// browser"), so reloading /stats/ shows them again without choosing the ZIP.
+// Only this browser can read them; "Forget" deletes them.
 
 import type { Apps, PackageData } from "./parse.ts";
 
