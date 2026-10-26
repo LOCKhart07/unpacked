@@ -7,9 +7,13 @@ import {
   ranges, streamNamer, streams, voice,
   type MessageStats, type Range, type Series,
 } from "./stats.ts";
+import { forgetPackage, loadPackage, savePackage } from "./saved.ts";
 import { cardBlob, drawCard, type CardData } from "./share-card.ts";
 import { wordCloud } from "./wordcloud.ts";
 import type { WorkerMessage } from "./worker.ts";
+// The built worker's URL has a content hash, which changes whenever the parser
+// does, so it also says whether saved results came from this parser.
+import workerUrl from "./worker.ts?worker&url";
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
 
@@ -66,6 +70,8 @@ function fail(message: string, error?: string) {
 
 // Set while showing the made-up sample package, so the page says so.
 let demo = false;
+// When the results shown are saved in this browser (never for the sample).
+let savedAt: number | null = null;
 
 function start(file: File, isDemo = false) {
   errorBox.hidden = true;
@@ -80,7 +86,7 @@ function start(file: File, isDemo = false) {
   phase.textContent = "Starting";
   bar.style.width = "0%";
   percent.textContent = "";
-  worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
+  worker = new Worker(workerUrl, { type: "module" });
   worker.onmessage = (e: MessageEvent<WorkerMessage>) => {
     const m = e.data;
     if (m.type === "progress") {
@@ -94,7 +100,16 @@ function start(file: File, isDemo = false) {
     } else {
       worker?.terminate();
       worker = null;
+      savedAt = null;
       render(m.data, m.apps);
+      if (!isDemo) {
+        const now = Date.now();
+        savePackage({ version: workerUrl, data: m.data, apps: m.apps, savedAt: now }).then((ok) => {
+          if (!ok) return;
+          savedAt = now;
+          redraw?.();
+        });
+      }
     }
   };
   worker.onerror = (e) => fail(`Something went wrong while reading the package: ${e.message}`, e.message);
@@ -126,6 +141,16 @@ async function startDemo() {
 }
 $<HTMLButtonElement>("#demo").addEventListener("click", startDemo);
 if (new URLSearchParams(location.search).has("demo")) startDemo();
+else {
+  // Show the last package opened in this browser, if any.
+  loadPackage(workerUrl).then((s) => {
+    // Skip if a package was chosen while this was loading.
+    if (!s || worker || !results.hidden) return;
+    demo = false;
+    savedAt = s.savedAt;
+    render(s.data, s.apps);
+  });
+}
 
 cancel.addEventListener("click", () => {
   worker?.terminate();
@@ -601,6 +626,8 @@ function render(data: PackageData, apps: Apps) {
           <p class="eyebrow">Your Discord, unpacked</p>
           <h1>${esc(who)}</h1>
           <p class="muted">${span.last ? `Data from ${strong(date(span.first))} to ${strong(date(span.last))}.` : ""} Nothing left your browser.</p>
+          ${savedAt ? `<p class="muted small saved">Saved in this browser on ${esc(date(savedAt))}, so it's here when you come back.
+            <button class="link" id="forget">Forget it</button></p>` : ""}
         </div>
         <div class="head-actions">
           <button class="button small" id="share-open">Share image</button>
@@ -636,6 +663,14 @@ function render(data: PackageData, apps: Apps) {
       }));
     // The card starts on the range the viewer is looking at.
     $<HTMLButtonElement>("#share-open").addEventListener("click", () => openShare(ranged ? range : LIFETIME));
+    document.querySelector("#forget")?.addEventListener("click", async () => {
+      await forgetPackage();
+      savedAt = null;
+      redraw = null;
+      share = null;
+      input.value = "";
+      show("drop");
+    });
     $<HTMLButtonElement>("#again").addEventListener("click", () => {
       redraw = null;
       share = null;

@@ -203,3 +203,6 @@ details summary { cursor: pointer; color: var(--accent-2); margin-top: 10px; }
 .share-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-block: 14px 8px; }
 .share-actions .check { display: flex; align-items: center; gap: 6px; margin-right: auto; cursor: pointer; }
 .share p { margin: 0; }
+
+.saved { margin: 0; }
+.link { background: none; border: 0; padding: 0; font: inherit; color: var(--accent-2); text-decoration: underline; cursor: pointer; }
