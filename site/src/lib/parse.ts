@@ -115,6 +115,7 @@ export interface PackageData {
   channels: Channel[];
   messages: MessageRec[];
   serverNames: Record<string, string>;
+  serverIcons: Record<string, string>; // server id -> icon hash, only for servers you own
   channelNames: Record<string, string>;
   lastEvent: number; // latest event time, about when the package was exported
   timeZones: string[]; // the events' time_zone values, most used first
@@ -288,6 +289,7 @@ export async function parsePackage(zip: Blob, onProgress: (p: Progress) => void 
     channels: [],
     messages: [],
     serverNames: {},
+    serverIcons: {},
     channelNames: {},
     lastEvent: 0,
     timeZones: [],
@@ -321,6 +323,13 @@ export async function parsePackage(zip: Blob, onProgress: (p: Progress) => void 
 
   const servers = findIndex(entries, names, "guild.json");
   if (servers) data.serverNames = JSON.parse(await entryText(zip, servers));
+  // Most guild.json files are just id and name; servers you own also have the icon.
+  for (const e of entries.filter((e) => base(e.name) === "guild.json")) {
+    const text = await entryText(zip, e);
+    if (!text.includes('"icon_hash"')) continue;
+    const g = JSON.parse(text);
+    if (g.icon_hash) data.serverIcons[String(g.id)] = g.icon_hash;
+  }
   const channels = findIndex(entries, names, "channel.json");
   if (channels) data.channelNames = JSON.parse(await entryText(zip, channels));
 
@@ -653,7 +662,10 @@ async function rpcLookup(id: string): Promise<{ name: string; icon?: string | nu
 
 // Square game icon on Discord's CDN. The browser fetches it straight from
 // Discord, which only learns the app id (the page sends no referrer).
-export const emojiImage = (id: string, animated: boolean, size = 64) =>
+export const serverIcon = (id: string, hash: string, size = 128) =>
+  `https://cdn.discordapp.com/icons/${id}/${hash}.webp?size=${size}`;
+
+export const emojiImage =(id: string, animated: boolean, size = 64) =>
   `https://cdn.discordapp.com/emojis/${id}.webp?size=${size}${animated ? "&animated=true" : ""}`;
 
 export const appIcon = (id: string, hash: string, size = 128) =>

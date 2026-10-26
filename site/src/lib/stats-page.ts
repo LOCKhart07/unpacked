@@ -1,7 +1,7 @@
 // The /stats/ page: file input, worker, progress, and rendering the results.
 // Plain DOM; every value from the package goes through esc().
 
-import { appIcon, emojiImage, type Apps, type PackageData, type Payment } from "./parse.ts";
+import { appIcon, emojiImage, serverIcon, type Apps, type PackageData, type Payment } from "./parse.ts";
 import {
   BADGE_START, LIFETIME, SCREEN_SHARE, STREAM_ROLE_LABELS, badges, canonName, customEmoji, dataSpan, gameIcon, hours, idsByName, messages, pct, playtime,
   counts, localDate, ranges, sessions, setTimeZone, streamNamer, streams, timeZone, voice,
@@ -263,13 +263,18 @@ function peakOf(s: Series): [string, number] | null {
   return best && [seriesKey(s, best[0]), best[1]];
 }
 
-function tile(label: string, value: string, sub = "", img: string | null = null) {
+// `initials` stand in when there's no image, or when it fails to load.
+function tile(label: string, value: string, sub = "", img: string | null = null, initials = "") {
   const text = `<div class="tile-label">${esc(label)}</div><div class="tile-value">${esc(value)}</div>${
     sub ? `<div class="tile-sub muted">${esc(sub)}</div>` : ""}`;
-  return img
-    ? `<div class="tile has-img"><img src="${esc(img)}" alt="" width="56" height="56"><div>${text}</div></div>`
-    : `<div class="tile">${text}</div>`;
+  const pic = img ? `<img src="${esc(img)}" alt="" width="56" height="56"${initials ? ` data-initials="${esc(initials)}"` : ""}>`
+    : initials ? `<span class="tile-initials" aria-hidden="true">${esc(initials)}</span>` : "";
+  return pic ? `<div class="tile has-img">${pic}<div>${text}</div></div>` : `<div class="tile">${text}</div>`;
 }
+
+// What Discord shows for a server without an icon: "Pixel Pals" -> "PP".
+const initialsOf = (name: string) =>
+  name.split(/\s+/).filter(Boolean).map((w) => Array.from(w)[0]).join("").slice(0, 3).toUpperCase();
 
 // The headline number of a tab: bigger, with a line or two that put it in
 // perspective. `lines` are HTML, built with strong() / esc().
@@ -476,7 +481,13 @@ function render(data: PackageData, apps: Apps) {
     byName ??= idsByName(names, play.rows, aliases);
     return iconUrl(byName.get(canonName(name)));
   };
-  const who = data.user ? data.user.globalName || data.user.username : "Your package";
+  // Icons are only in the package for servers you own.
+  const serverPic = (name: string) => {
+    const id = Object.keys(data.serverNames).find((k) => data.serverNames[k] === name);
+    const hash = id && data.serverIcons[id];
+    return hash ? serverIcon(id, hash) : null;
+  };
+  const who = data.user ?data.user.globalName || data.user.username : "Your package";
   // Shared by the ranged tabs, so switching between Streaming and Voice keeps it.
   let range: Range = LIFETIME;
   // Word and emoji counting goes over every message, so keep results per range.
@@ -563,7 +574,8 @@ function render(data: PackageData, apps: Apps) {
           iconUrl(play.rows[0]?.ids))}
         ${tile("Most streamed game", topGame?.[0] ?? "–", topGame ? hours(topGame[1]) : "",
           topGame ? iconForName(topGame[0]) : null)}
-        ${tile("Top voice server", v.servers[0]?.[0] ?? "–", v.servers[0] ? hours(v.servers[0][1]) : "")}
+        ${tile("Top voice server", v.servers[0]?.[0] ?? "–", v.servers[0] ? hours(v.servers[0][1]) : "",
+          v.servers[0] ? serverPic(v.servers[0][0]) : null, v.servers[0] ? initialsOf(v.servers[0][0]) : "")}
       </div>
       ${facts.length ? `<section class="card"><h2>Highlights</h2><ul class="facts">${
         facts.map((f) => `<li>${f}</li>`).join("")}</ul></section>` : ""}`;
@@ -882,6 +894,7 @@ function render(data: PackageData, apps: Apps) {
         // Keep table rows aligned with the same blank square rows without an icon get.
         // A deleted custom emoji shows its name instead.
         if (img.classList.contains("emoji-img")) img.replaceWith(Object.assign(document.createElement("span"), { className: "custom", textContent: img.alt }));
+        else if (img.dataset.initials) img.replaceWith(Object.assign(document.createElement("span"), { className: "tile-initials", textContent: img.dataset.initials }));
         else if (img.classList.contains("row-icon")) img.replaceWith(Object.assign(document.createElement("span"), { className: "row-icon" }));
         else img.remove();
       }, { once: true }));

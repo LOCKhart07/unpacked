@@ -183,6 +183,7 @@ details summary { cursor: pointer; color: var(--accent-2); margin-top: 10px; }
 .tile.has-img { display: flex; align-items: center; gap: 14px; }
 .tile.has-img img { flex: none; width: 56px; height: 56px; border-radius: 12px; object-fit: cover; background: var(--surface-2); }
 .tile.has-img > div { min-width: 0; }
+.tile-initials { flex: none; display: grid; place-items: center; width: 56px; height: 56px; border-radius: 16px; background: var(--surface-2); color: var(--muted); font-weight: 700; font-size: 1.1rem; }
 .row-icon { display: inline-block; width: 24px; height: 24px; border-radius: 6px; margin-right: 10px; vertical-align: middle; background: var(--surface-2); object-fit: cover; }
 
 .head-actions { display: flex; gap: 10px; flex-wrap: wrap; }
