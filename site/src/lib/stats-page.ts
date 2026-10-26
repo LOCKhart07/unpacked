@@ -196,6 +196,22 @@ function table(
     .join("")}</table>`;
 }
 
+// A ranked table that shows the top `shown` rows and the rest behind "Show
+// all". A list only one or two longer than that is shown in full.
+function ranked(
+  rows: [string, number][],
+  noun: string,
+  total: number,
+  fmt: (n: number) => string = hours,
+  icon?: (name: string) => string | null,
+  shown = 10,
+) {
+  if (rows.length <= shown + 2) return table(rows, total, undefined, fmt, icon);
+  return `${table(rows.slice(0, shown), total, undefined, fmt, icon)}
+    <details><summary>Show all ${count(rows.length)} ${noun}</summary>${
+      table(rows.slice(shown), total, rows[0][1], fmt, icon, shown + 1)}</details>`;
+}
+
 // Vertical bar chart with a value axis and a tooltip per bar. `label` picks
 // the axis label under a bar ("" = none), so long series only label a few;
 // `name` is the full name in the tooltip and the peak note.
@@ -550,9 +566,7 @@ function render(data: PackageData, apps: Apps) {
     <section class="card">
       <h2>Playtime</h2>
       <p class="muted small">The package has a single total per game, with no dates, so this can't be split by year.</p>
-      ${table(play.rows.slice(0, 20).map((r) => [r.name, r.seconds]), play.total, undefined, hours, rowIcon)}
-      ${play.rows.length > 20 ? `<details><summary>Show all ${play.rows.length} games</summary>${
-        table(play.rows.slice(20).map((r) => [r.name, r.seconds]), play.total, play.rows[0].seconds, hours, rowIcon, 21)}</details>` : ""}
+      ${ranked(play.rows.map((r) => [r.name, r.seconds]), "games", play.total, hours, rowIcon, 20)}
     </section>`;
 
   const streaming = () => {
@@ -575,7 +589,7 @@ function render(data: PackageData, apps: Apps) {
         <div class="split">
           <div>
             <h3>What you streamed</h3>
-            ${table(s.topApps, s.seconds[0], undefined, hours, rowIcon)}
+            ${ranked(s.topApps, "games", s.seconds[0], hours, rowIcon)}
           </div>
           <div>
             ${s.longest ? `<h3>Longest stream</h3><p>${strong(hours(s.longest.sec))} of ${
@@ -608,8 +622,8 @@ function render(data: PackageData, apps: Apps) {
       </section>
       <section class="card">
         <div class="split">
-          <div><h3>Top servers</h3>${table(v.servers, v.total)}</div>
-          <div><h3>Top channels</h3>${table(v.channels, v.total)}</div>
+          <div><h3>Top servers</h3>${ranked(v.servers, "servers", v.total)}</div>
+          <div><h3>Top channels</h3>${ranked(v.channels, "channels", v.total)}</div>
         </div>
         <div class="split">
           <div><h3>By kind</h3>${table(v.kinds)}</div>
@@ -658,12 +672,12 @@ function render(data: PackageData, apps: Apps) {
       </section>
       <section class="card">
         <div class="split">
-          <div><h3>Top DMs</h3>${table(m.dms, m.count, undefined, count)}</div>
-          <div><h3>Top servers</h3>${table(m.servers, m.count, undefined, count)}</div>
+          <div><h3>Top DMs</h3>${ranked(m.dms, "DMs", m.count, count)}</div>
+          <div><h3>Top servers</h3>${ranked(m.servers, "servers", m.count, count)}</div>
         </div>
         <div class="split">
-          <div><h3>Top channels</h3>${table(m.channels, m.count, undefined, count)}</div>
-          ${m.groups.length ? `<div><h3>Group DMs</h3>${table(m.groups, m.count, undefined, count)}</div>` : ""}
+          <div><h3>Top channels</h3>${ranked(m.channels, "channels", m.count, count)}</div>
+          ${m.groups.length ? `<div><h3>Group DMs</h3>${ranked(m.groups, "group DMs", m.count, count)}</div>` : ""}
         </div>
       </section>
       <section class="card">

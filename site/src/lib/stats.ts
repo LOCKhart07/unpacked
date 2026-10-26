@@ -218,7 +218,7 @@ export function streams(recs: StreamRec[], range: Range, nameOf: (r: StreamRec) 
     sessions,
     series: toSeries(b.unit, sel.length ? b.keys : new Map()),
     byYear: [...byYear].sort((a, b) => a[0] - b[0]),
-    topApps: [...apps.values()].sort((a, b) => b.sec - a.sec).slice(0, 15).map((a) => [a.name, a.sec] as [string, number]),
+    topApps: [...apps.values()].sort((a, b) => b.sec - a.sec).map((a) => [a.name, a.sec] as [string, number]),
     longest: longest && { sec: longest.sec, t: longest.t, name: nameOf(longest) },
     maxViewers,
   };
@@ -290,8 +290,8 @@ export function voice(recs: VoiceRec[], range: Range, data: Pick<PackageData, "s
     longest: longest && { sec: longest.sec, t: longest.t, where: longest.guild ? serverName(longest.guild) : "a call" },
     byYear: [...byYear].sort(),
     kinds: sortedTotals(kinds),
-    servers: sortedTotals(servers, 10).map(([g, s]) => [serverName(g), s] as [string, number]),
-    channels: sortedTotals(channels, 10).map(([k, s]) => {
+    servers: sortedTotals(servers).map(([g, s]) => [serverName(g), s] as [string, number]),
+    channels: sortedTotals(channels).map(([k, s]) => {
       const [g, c] = k.split("/");
       // Messages/index.json only names channels you've typed in.
       const name = data.channelNames[c] ?? (g ? `#${c} (${serverName(g)})` : `Call ${c}`);
@@ -395,7 +395,6 @@ export function messages(data: Pick<PackageData, "messages" | "channels">, range
   const top = (kind: string) => [...byChannel]
     .filter(([c]) => ch[c].kind === kind)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 10)
     .map(([c, n]) => [kind === "server" && ch[c].server ? `#${ch[c].name} (${ch[c].server})` : ch[c].name, n] as [string, number]);
 
   const spanDays = Math.max(1, Math.ceil((spanEnd - spanStart) / DAY));
@@ -408,7 +407,7 @@ export function messages(data: Pick<PackageData, "messages" | "channels">, range
     dms: top("dm"),
     groups: top("group"),
     channels: top("server"),
-    servers: sortedTotals(servers, 10),
+    servers: sortedTotals(servers),
     series: toSeries(b.unit, first ? b.keys : new Map()),
     hours,
     weekdays,
