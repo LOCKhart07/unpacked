@@ -233,7 +233,7 @@ export const VOICE_KINDS: Record<string, string> = {
   "13": "Stage",
 };
 
-export function voice(recs: VoiceRec[], range: Range, data: Pick<PackageData, "serverNames" | "channelNames">) {
+export function voice(recs: VoiceRec[], range: Range, data: Pick<PackageData, "serverNames" | "channelNames" | "channels">) {
   const sel = recs.filter(inRange(range));
   // Each source has gaps (voice_disconnect barely exists before 2020;
   // leave_voice_channel lacks durations on many late-2020 events). Both
@@ -280,6 +280,7 @@ export function voice(recs: VoiceRec[], range: Range, data: Pick<PackageData, "s
     for (const k of b.keys.keys()) b.keys.set(k, Math.max(vd.get(k) ?? 0, lv.get(k) ?? 0));
   }
   const serverName = (g: string) => data.serverNames[g] ?? `Unknown server (${g})`;
+  const channelsById = new Map(data.channels.map((ch) => [ch.id, ch]));
   return {
     total,
     series: toSeries(b.unit, sel.length ? b.keys : new Map()),
@@ -293,8 +294,11 @@ export function voice(recs: VoiceRec[], range: Range, data: Pick<PackageData, "s
     servers: sortedTotals(servers).map(([g, s]) => [serverName(g), s] as [string, number]),
     channels: sortedTotals(channels).map(([k, s]) => {
       const [g, c] = k.split("/");
-      // Messages/index.json only names channels you've typed in.
-      const name = data.channelNames[c] ?? (g ? `#${c} (${serverName(g)})` : `Call ${c}`);
+      const exported = channelsById.get(c)?.name;
+      const indexed = data.channelNames[c];
+      const name = exported && exported !== `#${c}` ? exported
+        : indexed && indexed !== `#${c}` ? indexed
+          : g ? `Hidden channel (${serverName(g)})` : "Call";
       return [name, s] as [string, number];
     }),
   };
