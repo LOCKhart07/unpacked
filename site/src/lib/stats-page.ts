@@ -255,8 +255,9 @@ function seriesChart(s: Series, fmt: (n: number) => string = count) {
   const pts = s.points;
   const name = (k: string) => seriesKey(s, k);
   if (s.unit === "day") return chart(pts, fmt, (k, i) => (i % 7 === 0 ? `${Number(k.slice(8))} ${MONTHS[Number(k.slice(5, 7)) - 1]}` : ""), name);
-  // Many months: label each January with its year. A year or less: month names.
-  if (pts.length > 18) return chart(pts, fmt, (k, i) => (k.endsWith("-01") || i === 0 ? k.slice(0, 4) : ""), name);
+  // Many months: label each January with its year. Don't also label the first
+  // month: when a series starts in December, that would crowd January's label.
+  if (pts.length > 18) return chart(pts, fmt, (k) => (k.endsWith("-01") ? k.slice(0, 4) : ""), name);
   return chart(pts, fmt, (k) => MONTHS[Number(k.slice(5, 7)) - 1], name);
 }
 
